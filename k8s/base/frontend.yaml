@@ -1,0 +1,44 @@
+# 프론트엔드 (React 빌드 결과를 Nginx로 서빙)
+# IMAGE_TAG: 커밋 SHA로 교체 후 적용 (latest 금지)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: news
+  labels: {app: frontend}
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: frontend}
+  template:
+    metadata:
+      labels: {app: frontend}
+    spec:
+      containers:
+      - name: frontend
+        image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-frontend:IMAGE_TAG
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          httpGet: {path: /, port: 80}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: {path: /, port: 80}
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: news
+spec:
+  selector: {app: frontend}
+  ports:
+  - port: 80
+    targetPort: 80
