@@ -1,5 +1,6 @@
 # 백엔드 (API / 워커 / 요약 배치) — 같은 이미지, APP_ROLE만 다름
 # 사전 준비: Secret mysql-secret(password), app-secret(JWT_SECRET) 생성
+# 세 역할 모두 initContainer(wait-mysql)가 MySQL 포트가 열릴 때까지 기다린 뒤 앱을 시작한다
 # IMAGE: 이미지 주소·태그 확정 후 교체 (커밋 SHA 태그, latest 금지)
 apiVersion: v1
 kind: ConfigMap
@@ -33,6 +34,14 @@ spec:
       labels: {app: api}
     spec:
       terminationGracePeriodSeconds: 30
+      initContainers:
+      # 재부팅 직후 MySQL·클러스터 DNS보다 앱이 먼저 떠서 재시작이 반복되던 문제 방지
+      - name: wait-mysql
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z -w 2 mysql 3306; do echo "MySQL 대기 중"; sleep 2; done']
+        resources:
+          requests: {cpu: 10m, memory: 16Mi}
+          limits: {memory: 32Mi}
       containers:
       - name: api
         image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend:IMAGE_TAG
@@ -45,10 +54,6 @@ spec:
           valueFrom: {secretKeyRef: {name: mysql-secret, key: password}}
         - name: JWT_SECRET
           valueFrom: {secretKeyRef: {name: app-secret, key: JWT_SECRET}}
-        - name: NAVER_CLIENT_ID
-          valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_ID, optional: true}}
-        - name: NAVER_CLIENT_SECRET
-          valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_SECRET, optional: true}}
         envFrom:
         - configMapRef: {name: backend-config}
         startupProbe:
@@ -91,6 +96,14 @@ spec:
       labels: {app: worker}
     spec:
       terminationGracePeriodSeconds: 60
+      initContainers:
+      # 재부팅 직후 MySQL·클러스터 DNS보다 앱이 먼저 떠서 재시작이 반복되던 문제 방지
+      - name: wait-mysql
+        image: busybox:1.36.1
+        command: ['sh', '-c', 'until nc -z -w 2 mysql 3306; do echo "MySQL 대기 중"; sleep 2; done']
+        resources:
+          requests: {cpu: 10m, memory: 16Mi}
+          limits: {memory: 32Mi}
       containers:
       - name: worker
         image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend:IMAGE_TAG
@@ -103,10 +116,6 @@ spec:
           valueFrom: {secretKeyRef: {name: mysql-secret, key: password}}
         - name: JWT_SECRET
           valueFrom: {secretKeyRef: {name: app-secret, key: JWT_SECRET}}
-        - name: NAVER_CLIENT_ID
-          valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_ID, optional: true}}
-        - name: NAVER_CLIENT_SECRET
-          valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_SECRET, optional: true}}
         envFrom:
         - configMapRef: {name: backend-config}
         startupProbe:
@@ -142,6 +151,14 @@ spec:
           labels: {app: batch}
         spec:
           restartPolicy: Never
+          initContainers:
+          # 재부팅 직후 MySQL·클러스터 DNS보다 앱이 먼저 떠서 재시작이 반복되던 문제 방지
+          - name: wait-mysql
+            image: busybox:1.36.1
+            command: ['sh', '-c', 'until nc -z -w 2 mysql 3306; do echo "MySQL 대기 중"; sleep 2; done']
+            resources:
+              requests: {cpu: 10m, memory: 16Mi}
+              limits: {memory: 32Mi}
           containers:
           - name: batch
             image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend:IMAGE_TAG
@@ -152,10 +169,6 @@ spec:
               valueFrom: {secretKeyRef: {name: mysql-secret, key: password}}
             - name: JWT_SECRET
               valueFrom: {secretKeyRef: {name: app-secret, key: JWT_SECRET}}
-            - name: NAVER_CLIENT_ID
-              valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_ID, optional: true}}
-            - name: NAVER_CLIENT_SECRET
-              valueFrom: {secretKeyRef: {name: app-secret, key: NAVER_CLIENT_SECRET, optional: true}}
             envFrom:
             - configMapRef: {name: backend-config}
             resources:
