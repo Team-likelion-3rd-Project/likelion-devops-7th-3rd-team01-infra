@@ -1,0 +1,72 @@
+# 온프렘(develop) 배포
+# - 앱 CI가 이미지 push 후 repository_dispatch(deploy-onprem)로 호출: client_payload {app, sha}
+# - 수동 재배포·롤백: Actions 탭 → deploy-onprem → Run workflow (app, sha 입력)
+# self-hosted runner에서 실행되므로 pull_request 트리거는 절대 추가하지 않는다
+name: deploy-onprem
+
+on:
+  repository_dispatch:
+    types: [deploy-onprem]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 배포할 앱
+        type: choice
+        options: [backend, frontend]
+        required: true
+      sha:
+        description: 배포할 전체 커밋 SHA (40자리)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-onprem-${{ github.event.client_payload.app || inputs.app }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, onprem]
+    timeout-minutes: 15
+    env:
+      # 입력값은 env로만 넘기고 run 안에 ${{ }}로 직접 넣지 않는다 (명령 주입 방지)
+      APP: ${{ github.event.client_payload.app || inputs.app }}
+      SHA: ${{ github.event.client_payload.sha || inputs.sha }}
+      NS: news
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 입력값 검증
+        run: |
+          case "$APP" in backend|frontend) ;; *) echo "::error::app은 backend 또는 frontend: '$APP'"; exit 1;; esac
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha는 40자리 소문자 16진수: '$SHA'"; exit 1; }
+          echo "배포: $APP @ $SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 매니페스트 적용
+        run: |
+          sed "s/IMAGE_TAG/$SHA/" "k8s/base/$APP.yaml" > "$RUNNER_TEMP/$APP.yaml"
+          kubectl apply -f "$RUNNER_TEMP/$APP.yaml"
+
+      - name: 롤아웃 완료 대기
+        run: |
+          if [ "$APP" = backend ]; then deploys="api worker"; else deploys="frontend"; fi
+          for d in $deploys; do
+            kubectl rollout status "deployment/$d" -n "$NS" --timeout=5m
+          done
+
+      - name: 배포 버전 확인
+        run: |
+          if [ "$APP" = backend ]; then
+            got="$(kubectl get --raw "/api/v1/namespaces/$NS/services/api:8080/proxy/actuator/info" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p')"
+          else
+            got="$(kubectl get deployment/frontend -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://')"
+          fi
+          echo "실행 중인 버전: $got" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$got" = "$SHA" ] || { echo "::error::배포 버전 불일치 (기대 $SHA, 실제 $got)"; exit 1; }
+
+      - name: 실패 시 상태 기록
+        if: failure()
+        run: |
+          kubectl get pods -n "$NS" -o wide || true
+          kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20 || true
