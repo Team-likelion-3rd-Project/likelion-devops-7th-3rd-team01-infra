@@ -1,0 +1,45 @@
+name: terraform-check
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    # PR code must not execute on the on-prem runner.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.16.6'
+          terraform_wrapper: false
+      - name: Format
+        run: terraform fmt -check -recursive
+      - name: Initialize without backend
+        run: terraform init -backend=false -lockfile=readonly -input=false
+      - name: Validate
+        run: terraform validate -no-color
+      - name: Mock topology and input tests
+        run: terraform test -no-color
