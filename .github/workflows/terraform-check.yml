@@ -31,10 +31,18 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: '1.16.6'
-          terraform_wrapper: false
+      - name: Install verified Terraform CLI
+        # Organization permits GitHub-owned Actions only. Use the official CLI
+        # archive, with its published SHA256 pinned below, without an install Action.
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_amd64.zip \
+            --output terraform.zip
+          echo '38034b38d03096399a7a1264a14561a8029b2b496fd1f169452656e53968f1b7  terraform.zip' | sha256sum --check --strict
+          mkdir -p terraform-cli
+          unzip -q terraform.zip -d terraform-cli
+          echo "$PWD/terraform-cli" >> "$GITHUB_PATH"
       - name: Format
         run: terraform fmt -check -recursive
       - name: Initialize without backend
