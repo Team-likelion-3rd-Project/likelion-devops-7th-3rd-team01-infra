@@ -1,7 +1,6 @@
-# Illustrative Seoul values only. Confirm permitted region/AZs with the team.
+# 복사해서 terraform.tfvars로 저장 (커밋하지 않음)
 aws_region         = "ap-northeast-2"
 availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
 environment        = "practice"
-# Current ON-PREM Traefik HTTP NodePort is 30080. AWS target/health port is not agreed.
-# Set alb_target_ports only after confirming the AWS listener/target/health design.
-# alb_target_ports = [CONFIRMED_INTEGER_PORT]
+# ALB → 워커 Traefik NodePort (온프렘과 같은 30080). 헬스체크도 같은 포트
+alb_target_ports = [30080]

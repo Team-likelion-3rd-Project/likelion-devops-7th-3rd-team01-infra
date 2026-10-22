@@ -52,3 +52,7 @@ kubeconfig*
 admin.conf
 *secret*.yaml
 !*secret*.example.yaml
+
+# Terraform S3 backend 설정 (버킷 이름에 계정 번호 포함)
+backend.hcl
+tfplan

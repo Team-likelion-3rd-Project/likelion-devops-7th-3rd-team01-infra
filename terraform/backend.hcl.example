@@ -1,0 +1,2 @@
+# 복사해서 backend.hcl로 저장 (커밋하지 않음)
+bucket = "team01-newsbrief-tfstate-<계정번호>"
