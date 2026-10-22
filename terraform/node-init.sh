@@ -37,7 +37,8 @@ mkdir -p /etc/apt/keyrings
 curl -fsSL https://pkgs.k8s.io/core:/stable:/${k8s_minor}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${k8s_minor}/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
 apt-get update
-VER=$(apt-cache madison kubeadm | awk '$3 ~ /^${k8s_version}-/ {print $3; exit}')
+# awk에서 exit로 일찍 끝내면 apt-cache가 SIGPIPE로 실패하고 pipefail 때문에 스크립트가 멈춘다 → 끝까지 읽고 첫 값만 출력
+VER=$(apt-cache madison kubeadm | awk '$3 ~ /^${k8s_version}-/ && !f {print $3; f=1}')
 apt-get install -y kubelet="$VER" kubeadm="$VER" kubectl="$VER"
 apt-mark hold kubelet kubeadm kubectl
 systemctl enable kubelet

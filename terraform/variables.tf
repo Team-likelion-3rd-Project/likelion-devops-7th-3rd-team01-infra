@@ -64,3 +64,25 @@ variable "bedrock_policy_name" {
   type        = string
   default     = "newsbrief-bedrock-invoke"
 }
+
+variable "db_instance_class" {
+  type    = string
+  default = "db.t3.micro"
+}
+
+variable "db_multi_az" {
+  description = "RDS Multi-AZ. 평소 false, 장애 시나리오 C3 시험 때 true"
+  type        = bool
+  default     = false
+}
+
+variable "redis_node_type" {
+  type    = string
+  default = "cache.t3.micro"
+}
+
+variable "redis_replicas" {
+  description = "Redis 복제본 + 자동 장애 전환. 평소 false, 장애 시나리오 C5 시험 때 true"
+  type        = bool
+  default     = false
+}
