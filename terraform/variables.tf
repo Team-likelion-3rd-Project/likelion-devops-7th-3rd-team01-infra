@@ -25,3 +25,42 @@ variable "alb_target_ports" {
     error_message = "Supply at least one confirmed integer TCP port (1-65535)."
   }
 }
+
+variable "nat_mode" {
+  description = "per_az: AZ마다 NAT(장애 시나리오 C2) / single: NAT 1개(평소) / none: NAT 없음(작업 안 할 때)"
+  type        = string
+  default     = "single"
+  validation {
+    condition     = contains(["per_az", "single", "none"], var.nat_mode)
+    error_message = "nat_mode must be per_az, single, or none."
+  }
+}
+
+variable "cp_instance_type" {
+  type    = string
+  default = "t3.medium"
+}
+
+variable "worker_instance_type" {
+  # AWS에는 MySQL·Redis·프론트 파드가 없어 온프렘 워커보다 가볍다. 부족하면 t3.large로 올린다
+  type    = string
+  default = "t3.medium"
+}
+
+variable "k8s_minor" {
+  description = "pkgs.k8s.io 저장소 버전 (온프렘과 동일)"
+  type        = string
+  default     = "v1.35"
+}
+
+variable "k8s_version" {
+  description = "kubelet·kubeadm·kubectl 버전 (온프렘과 동일)"
+  type        = string
+  default     = "1.35.9"
+}
+
+variable "bedrock_policy_name" {
+  description = "노드 역할에 붙일 Bedrock 호출 정책 이름. 빈 값이면 붙이지 않는다"
+  type        = string
+  default     = "newsbrief-bedrock-invoke"
+}
