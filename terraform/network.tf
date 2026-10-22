@@ -1,5 +1,7 @@
 locals {
   zones = { a = var.availability_zones[0], b = var.availability_zones[1] }
+  # NAT 비용 모드: per_az(AZ마다 1개, 장애 시나리오 C2용) / single(A에만 1개, 평소) / none(작업 안 할 때 NAT 삭제)
+  nat_zones = { for k, z in local.zones : k => z if var.nat_mode == "per_az" || (var.nat_mode == "single" && k == "a") }
   subnets = {
     public_a = { cidr = "10.20.0.0/24", zone = "a", tier = "public" }
     public_b = { cidr = "10.20.1.0/24", zone = "b", tier = "public" }
@@ -31,12 +33,12 @@ resource "aws_internet_gateway" "main" {
 }
 
 resource "aws_eip" "nat" {
-  for_each = local.zones
+  for_each = local.nat_zones
   domain   = "vpc"
 }
 
 resource "aws_nat_gateway" "zonal" {
-  for_each      = local.zones
+  for_each      = local.nat_zones
   allocation_id = aws_eip.nat[each.key].id
   subnet_id     = aws_subnet.tier["public_${each.key}"].id
   depends_on    = [aws_internet_gateway.main]
@@ -59,10 +61,11 @@ resource "aws_route_table" "app" {
 }
 
 resource "aws_route" "app_internet" {
-  for_each               = local.zones
+  for_each               = { for k, z in local.zones : k => z if var.nat_mode != "none" }
   route_table_id         = aws_route_table.app[each.key].id
   destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.zonal[each.key].id
+  # single 모드에서는 B 앱 서브넷도 A의 NAT로 나간다 (AZ 간 전송 요금은 실습 규모에서 미미)
+  nat_gateway_id = aws_nat_gateway.zonal[var.nat_mode == "per_az" ? each.key : "a"].id
 }
 
 # Local VPC route only; deliberately no data-subnet internet default route.

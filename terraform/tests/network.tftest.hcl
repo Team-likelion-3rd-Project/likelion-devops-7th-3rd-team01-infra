@@ -2,6 +2,16 @@ mock_provider "aws" {
   mock_resource "aws_route_table" {
     defaults = { route = [] }
   }
+  # 가짜 값이라도 ARN 형식이어야 정책 연결 검사를 통과한다
+  mock_data "aws_iam_policy" {
+    defaults = { arn = "arn:aws:iam::123456789012:policy/newsbrief-bedrock-invoke" }
+  }
+  mock_data "aws_ssm_parameter" {
+    defaults = { value = "ami-0123456789abcdef0" }
+  }
+  mock_resource "aws_iam_role" {
+    defaults = { arn = "arn:aws:iam::123456789012:role/team01-k8s-node-mock" }
+  }
 }
 
 variables {
@@ -13,6 +23,9 @@ variables {
 run "network_contract" {
   # Mock apply only: no AWS credentials, API calls, or real resources.
   command = apply
+  variables {
+    nat_mode = "per_az"
+  }
 
   assert {
     condition     = length(aws_subnet.tier) == 6 && length(aws_nat_gateway.zonal) == 2
@@ -90,4 +103,56 @@ run "reject_out_of_range_port" {
     alb_target_ports = [65536]
   }
   expect_failures = [var.alb_target_ports]
+}
+
+run "cluster_contract" {
+  # Mock apply only: EC2 nodes, IAM role, node-to-node rules.
+  command = apply
+
+  assert {
+    condition     = length(aws_instance.node) == 3 && alltrue([for n in aws_instance.node : n.associate_public_ip_address == false])
+    error_message = "Three nodes without public IPv4."
+  }
+  assert {
+    condition     = aws_instance.node["cp"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-a"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-b"].subnet_id == aws_subnet.tier["app_b"].id
+    error_message = "Nodes must sit in the private app subnets, workers split across AZs."
+  }
+  assert {
+    condition     = alltrue([for n in aws_instance.node : n.metadata_options[0].http_tokens == "required" && n.metadata_options[0].http_put_response_hop_limit == 2])
+    error_message = "IMDSv2 required, hop limit 2 so pods can use the node role."
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == aws_security_group.tier["app"].id && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
+    error_message = "Nodes in the app SG must reach each other."
+  }
+}
+
+run "single_nat" {
+  command = apply
+  variables {
+    nat_mode = "single"
+  }
+  assert {
+    condition     = length(aws_nat_gateway.zonal) == 1 && length(aws_eip.nat) == 1 && alltrue([for r in aws_route.app_internet : r.nat_gateway_id == aws_nat_gateway.zonal["a"].id]) && length(aws_route.app_internet) == 2
+    error_message = "Single mode: one NAT in AZ A serving both app subnets."
+  }
+}
+
+run "no_nat" {
+  command = apply
+  variables {
+    nat_mode = "none"
+  }
+  assert {
+    condition     = length(aws_nat_gateway.zonal) == 0 && length(aws_eip.nat) == 0 && length(aws_route.app_internet) == 0
+    error_message = "None mode: no NAT, EIP, or app default route."
+  }
+}
+
+run "reject_bad_nat_mode" {
+  command = plan
+  variables {
+    nat_mode = "two"
+  }
+  expect_failures = [var.nat_mode]
 }
