@@ -1,0 +1,53 @@
+name: terraform-check
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    # PR code must not execute on the on-prem runner.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      AWS_EC2_METADATA_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install verified Terraform CLI
+        # Organization permits GitHub-owned Actions only. Use the official CLI
+        # archive, with its published SHA256 pinned below, without an install Action.
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            https://releases.hashicorp.com/terraform/1.16.6/terraform_1.16.6_linux_amd64.zip \
+            --output terraform.zip
+          echo '38034b38d03096399a7a1264a14561a8029b2b496fd1f169452656e53968f1b7  terraform.zip' | sha256sum --check --strict
+          mkdir -p terraform-cli
+          unzip -q terraform.zip -d terraform-cli
+          echo "$PWD/terraform-cli" >> "$GITHUB_PATH"
+      - name: Format
+        run: terraform fmt -check -recursive
+      - name: Initialize without backend
+        run: terraform init -backend=false -lockfile=readonly -input=false
+      - name: Validate
+        run: terraform validate -no-color
+      - name: Mock topology and input tests
+        run: terraform test -no-color

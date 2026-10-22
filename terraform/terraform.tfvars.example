@@ -1,0 +1,7 @@
+# Illustrative Seoul values only. Confirm permitted region/AZs with the team.
+aws_region         = "ap-northeast-2"
+availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
+environment        = "practice"
+# Current ON-PREM Traefik HTTP NodePort is 30080. AWS target/health port is not agreed.
+# Set alb_target_ports only after confirming the AWS listener/target/health design.
+# alb_target_ports = [CONFIRMED_INTEGER_PORT]
