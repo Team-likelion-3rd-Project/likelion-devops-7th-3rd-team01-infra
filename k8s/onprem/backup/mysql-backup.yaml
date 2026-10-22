@@ -1,0 +1,71 @@
+# MySQL 덤프 백업 (M4-7). 매일 03:10, 7일 보관. 적용: kubectl apply -f k8s/onprem/backup/
+# 저장 위치: PVC mysql-backup (local-path, DB 데이터 PVC와 분리)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-backup
+  namespace: news
+spec:
+  storageClassName: local-path
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 5Gi}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup
+  namespace: news
+spec:
+  schedule: "10 3 * * *"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels: {app: mysql-backup}
+        spec:
+          restartPolicy: Never
+          initContainers:
+          - name: wait-mysql
+            image: busybox:1.36.1
+            command: ['sh', '-c', 'until nc -z -w 2 mysql 3306; do echo "MySQL 대기 중"; sleep 2; done']
+            resources:
+              requests: {cpu: 10m, memory: 16Mi}
+              limits: {memory: 32Mi}
+          containers:
+          - name: dump
+            image: mysql:8.4
+            env:
+            # 비밀번호는 명령줄 대신 환경 변수로 넘긴다 (프로세스 목록·로그에 남지 않게)
+            - name: MYSQL_PWD
+              valueFrom: {secretKeyRef: {name: mysql-secret, key: root-password}}
+            - {name: TZ, value: KST-9}
+            command:
+            - sh
+            - -c
+            - |
+              set -eu
+              f=/backup/news-$(date +%Y%m%d-%H%M).sql
+              # --single-transaction: 테이블을 잠그지 않고 한 시점의 데이터로 덤프 (서비스 중단 없음)
+              mysqldump -h mysql -uroot --single-transaction --routines --triggers --events \
+                --set-gtid-purged=OFF --databases news > "$f.part"
+              # 마지막 줄이 완료 표시가 아니면 중간에 끊긴 덤프이므로 실패 처리
+              tail -1 "$f.part" | grep -q "Dump completed"
+              mv "$f.part" "$f"
+              if command -v gzip >/dev/null 2>&1; then gzip "$f"; fi
+              find /backup -name 'news-*.sql*' -mtime +6 -delete
+              ls -lh /backup
+            volumeMounts:
+            - {name: backup, mountPath: /backup}
+            resources:
+              requests: {cpu: 100m, memory: 128Mi}
+              limits: {memory: 512Mi}
+          volumes:
+          - name: backup
+            persistentVolumeClaim: {claimName: mysql-backup}

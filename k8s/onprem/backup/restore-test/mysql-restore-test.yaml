@@ -1,0 +1,35 @@
+# MySQL 복원 시험용 임시 파드 (M4-7). 상시 적용하지 않는다: 시험할 때만 apply, 끝나면 delete.
+# 운영 DB와 분리된 빈 MySQL(데이터는 emptyDir)에 최신 덤프를 넣어 본다. Service가 없어 외부에서 접근할 수 없다.
+# kubectl apply -f k8s/onprem/backup/ 은 하위 폴더를 읽지 않으므로 이 파일은 상시 적용되지 않는다. 절차는 onprem/backup.md
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-restore-test
+  namespace: news
+  labels: {app: mysql-restore-test}
+spec:
+  containers:
+  - name: mysql
+    image: mysql:8.4
+    env:
+    # 시험이 끝나면 지우는 빈 DB라 비밀번호를 두지 않는다
+    - {name: MYSQL_ALLOW_EMPTY_PASSWORD, value: "yes"}
+    volumeMounts:
+    - {name: data, mountPath: /var/lib/mysql}
+    - {name: config, mountPath: /etc/mysql/conf.d}
+    - {name: backup, mountPath: /backup, readOnly: true}
+    readinessProbe:
+      exec:
+        command: ["mysqladmin", "ping", "-h", "127.0.0.1", "-uroot"]
+      initialDelaySeconds: 15
+      periodSeconds: 5
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {memory: 1Gi}
+  volumes:
+  - name: data
+    emptyDir: {}
+  - name: config
+    configMap: {name: mysql-config}
+  - name: backup
+    persistentVolumeClaim: {claimName: mysql-backup}
