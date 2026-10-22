@@ -1,0 +1,30 @@
+# news 앱 알림 규칙 (M4-6). 적용: kubectl apply -f k8s/onprem/monitoring/
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: news-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: news
+    rules:
+    # 사용자 요청을 받을 api 파드가 하나도 없음
+    - alert: NewsApiDown
+      expr: kube_deployment_status_replicas_available{namespace="news",deployment="api"} == 0
+      for: 1m
+      labels: {severity: critical}
+      annotations:
+        summary: api has no available pods
+    # 이미지 없음(잘못된 SHA 배포)·반복 재시작으로 파드가 뜨지 못함
+    - alert: NewsPodNotStarting
+      expr: max by (pod, container, reason) (kube_pod_container_status_waiting_reason{namespace="news",reason=~"ImagePullBackOff|ErrImagePull|CrashLoopBackOff"}) > 0
+      for: 2m
+      labels: {severity: warning}
+      annotations:
+        summary: '{{ $labels.pod }} is stuck in {{ $labels.reason }}'
+    # 배치(기사 수집·요약) 실패. 실패한 Job 기록이 남아 있어도 계속 울리지 않도록 시작 1시간 이내만 본다
+    - alert: NewsBatchFailed
+      expr: (kube_job_status_failed{namespace="news"} > 0) and on(job_name) ((time() - kube_job_status_start_time{namespace="news"}) < 3600)
+      labels: {severity: warning}
+      annotations:
+        summary: batch job {{ $labels.job_name }} failed
