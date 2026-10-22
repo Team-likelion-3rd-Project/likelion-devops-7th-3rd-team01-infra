@@ -1,0 +1,52 @@
+# kube-prometheus-stack 설정 (온프렘, M4-6)
+# 설치·변경:
+#   helm upgrade --install kps prometheus-community/kube-prometheus-stack --version 92.10.1 \
+#     -n monitoring --create-namespace -f onprem/monitoring-values.yaml
+# 사전 준비: Grafana 관리자 계정 Secret (값은 저장소에 두지 않는다)
+#   kubectl create secret generic grafana-admin -n monitoring \
+#     --from-literal=admin-user=admin --from-literal=admin-password="$GRAFANA_PW"
+fullnameOverride: kps
+
+# VM 3대(메모리 제한) 기준으로 자원 상한을 둔다
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    retentionSize: 4GB
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+      limits: {memory: 1Gi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: {storage: 5Gi}
+    # 차트 밖에서 만든 ServiceMonitor·PrometheusRule(Traefik, news-alerts)도 읽게 한다
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: 10m, memory: 64Mi}
+      limits: {memory: 128Mi}
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  service:
+    type: NodePort
+    nodePort: 30300
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+
+# kubeadm은 이 구성요소들이 127.0.0.1에서만 지표를 열어 수집이 항상 실패한다 → 끈다
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
