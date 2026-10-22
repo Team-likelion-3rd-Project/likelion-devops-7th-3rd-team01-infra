@@ -9,6 +9,9 @@ mock_provider "aws" {
   mock_data "aws_ssm_parameter" {
     defaults = { value = "ami-0123456789abcdef0" }
   }
+  mock_resource "aws_db_instance" {
+    defaults = { address = "team01-news.mock.ap-northeast-2.rds.amazonaws.com" }
+  }
   mock_resource "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/team01-k8s-node-mock" }
   }
@@ -155,4 +158,21 @@ run "reject_bad_nat_mode" {
     nat_mode = "two"
   }
   expect_failures = [var.nat_mode]
+}
+
+run "data_contract" {
+  command = apply
+
+  assert {
+    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, aws_security_group.tier["db"].id)
+    error_message = "RDS must be private, encrypted, password managed by Secrets Manager, db SG only."
+  }
+  assert {
+    condition     = aws_db_instance.main.multi_az == false && aws_elasticache_replication_group.main.num_cache_clusters == 1
+    error_message = "Default to single-AZ RDS and single Redis node for cost."
+  }
+  assert {
+    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id])
+    error_message = "DB must sit in the data subnets."
+  }
 }
