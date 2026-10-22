@@ -59,3 +59,13 @@ resource "aws_vpc_security_group_egress_rule" "app_https" {
   to_port           = 443
   cidr_ipv4         = "0.0.0.0/0"
 }
+
+# EC2 Ubuntu 기본 apt 저장소(ap-northeast-2.ec2.archive.ubuntu.com)는 HTTP를 쓴다.
+# 노드에 containerd·kubelet 등을 설치할 때 apt update가 실패하지 않도록 80만 추가로 연다.
+resource "aws_vpc_security_group_egress_rule" "app_http" {
+  security_group_id = aws_security_group.tier["app"].id
+  ip_protocol       = "tcp"
+  from_port         = 80
+  to_port           = 80
+  cidr_ipv4         = "0.0.0.0/0"
+}

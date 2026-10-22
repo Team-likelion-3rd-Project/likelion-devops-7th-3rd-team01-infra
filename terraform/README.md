@@ -46,3 +46,12 @@ NAT·ALB·ElastiCache는 EC2 정지로 과금이 멈추지 않습니다. 테스�
 - [AWS provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
 - [보안그룹 규칙](https://docs.aws.amazon.com/vpc/latest/userguide/security-group-rules.html)
+
+## 실제 적용 (M4-1, 서울 리전 확정)
+
+1. AWS CLI는 MFA 임시 자격 증명으로 실행한다 (계정에 MFA 강제 정책).
+2. 상태 버킷(버전 관리·암호화·공개 차단)을 만든 뒤 `backend.hcl.example` → `backend.hcl`에 이름을 넣는다.
+3. `terraform.tfvars.example` → `terraform.tfvars`
+4. `terraform init -backend-config=backend.hcl` → `terraform plan -out=tfplan` → 결과 공유 후 `terraform apply tfplan`
+
+`backend.hcl`, `terraform.tfvars`, `tfplan`, 상태 파일은 커밋하지 않는다.
