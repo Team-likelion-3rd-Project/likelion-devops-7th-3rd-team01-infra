@@ -45,6 +45,8 @@ jobs:
 
       - name: 매니페스트 적용
         run: |
+          # 환경별 설정은 base에서 분리되어 있다 (온프렘: k8s/onprem/backend-config.yaml)
+          if [ "$APP" = backend ]; then kubectl apply -f k8s/onprem/backend-config.yaml; fi
           sed "s/IMAGE_TAG/$SHA/" "k8s/base/$APP.yaml" > "$RUNNER_TEMP/$APP.yaml"
           kubectl apply -f "$RUNNER_TEMP/$APP.yaml"
 

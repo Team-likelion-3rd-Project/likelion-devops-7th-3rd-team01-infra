@@ -1,0 +1,19 @@
+# AWS 백엔드 설정. ${...} 자리는 deploy-aws workflow가 GitHub Variables 값으로 채운다 (접속 주소를 저장소에 두지 않음)
+# DB·Redis는 ExternalName 서비스(mysql·redis, data-services.yaml)로 연결해서 SPRING_* 값은 온프렘과 같다
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: news
+data:
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/news
+  SPRING_DATASOURCE_USERNAME: news_app
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: "6379"
+  # HTTPS(ALB·CloudFront)라 로그인 쿠키를 Secure로
+  COOKIE_SECURE: "true"
+  # CloudFront가 /api/*를 api.<도메인>으로 넘기므로 화면 주소(app.<도메인>)를 허용해야 한다
+  CORS_ALLOWED_ORIGINS: "${APP_ORIGIN}"
+  # mock | bedrock (GitHub Variable AWS_AI_MODE). bedrock은 노드 IAM 역할로 호출 (액세스 키 없음)
+  AI_MODE: "${AI_MODE}"
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"

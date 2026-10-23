@@ -1,0 +1,14 @@
+# 온프렘 백엔드 설정 (클러스터 안 MySQL·Redis, HTTP라 쿠키 Secure 끔, AI는 mock)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: news
+data:
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/news
+  SPRING_DATASOURCE_USERNAME: news_app
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: "6379"
+  COOKIE_SECURE: "false"
+  AI_MODE: mock
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"
