@@ -1,4 +1,14 @@
 mock_provider "aws" {
+  # 프론트 배포(frontend.tf)용 가짜 데이터
+  mock_data "aws_caller_identity" {
+    defaults = { account_id = "123456789012" }
+  }
+  mock_data "aws_iam_policy_document" {
+    defaults = { json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+  }
+  mock_data "aws_iam_openid_connect_provider" {
+    defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" }
+  }
   mock_resource "aws_route_table" {
     defaults = { route = [] }
   }
