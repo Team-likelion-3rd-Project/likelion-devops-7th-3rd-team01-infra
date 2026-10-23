@@ -3,9 +3,10 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  frontend_repo = "Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-frontend"
-  frontend_host = "app.${var.domain_name}"
-  api_host      = "api.${var.domain_name}"
+  # GitHub이 이 저장소에 붙인 불변(immutable) sub 형식. 소유자·저장소 ID 포함 (프론트 레포 Settings → Actions → OIDC)
+  frontend_oidc_sub = "repo:Team-likelion-3rd-Project@336729042/likelion-devops-7th-3rd-team01-frontend@1418340218"
+  frontend_host     = "app.${var.domain_name}"
+  api_host          = "api.${var.domain_name}"
 }
 
 # CloudFront에 붙이는 인증서는 us-east-1에만 만들 수 있다.
@@ -194,7 +195,7 @@ data "aws_iam_policy_document" "frontend_deploy_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.frontend_repo}:ref:refs/heads/main"]
+      values   = ["${local.frontend_oidc_sub}:ref:refs/heads/main"]
     }
   }
 }
