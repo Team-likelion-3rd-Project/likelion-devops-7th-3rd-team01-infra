@@ -86,3 +86,8 @@ variable "redis_replicas" {
   type        = bool
   default     = false
 }
+
+variable "domain_name" {
+  description = "서비스 도메인 (예: news.example.com). 접속 주소라 저장소에 두지 않고 terraform.tfvars에 넣는다"
+  type        = string
+}
