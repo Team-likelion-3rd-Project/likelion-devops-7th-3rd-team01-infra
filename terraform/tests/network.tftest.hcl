@@ -12,6 +12,18 @@ mock_provider "aws" {
   mock_resource "aws_db_instance" {
     defaults = { address = "team01-news.mock.ap-northeast-2.rds.amazonaws.com" }
   }
+  mock_resource "aws_acm_certificate" {
+    defaults = { arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/mock" }
+  }
+  mock_resource "aws_acm_certificate_validation" {
+    defaults = { certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/mock" }
+  }
+  mock_resource "aws_lb" {
+    defaults = { arn = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/team01-alb/mock", dns_name = "team01-alb-mock.ap-northeast-2.elb.amazonaws.com" }
+  }
+  mock_resource "aws_lb_target_group" {
+    defaults = { arn = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/team01-traefik-web/mock" }
+  }
   mock_resource "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/team01-k8s-node-mock" }
   }
@@ -21,6 +33,7 @@ variables {
   aws_region         = "ap-northeast-2"
   availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
   alb_target_ports   = [30080]
+  domain_name        = "news.example.com"
 }
 
 run "network_contract" {
@@ -174,5 +187,22 @@ run "data_contract" {
   assert {
     condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id])
     error_message = "DB must sit in the data subnets."
+  }
+}
+
+run "alb_contract" {
+  command = apply
+
+  assert {
+    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([aws_subnet.tier["public_a"].id, aws_subnet.tier["public_b"].id]) && contains(aws_lb.main.security_groups, aws_security_group.tier["alb"].id)
+    error_message = "ALB must be internet-facing in the public subnets with the ALB SG."
+  }
+  assert {
+    condition     = length(aws_lb_target_group_attachment.worker) == 2 && !contains(keys(aws_lb_target_group_attachment.worker), "cp") && aws_lb_target_group.traefik.port == 30080
+    error_message = "Only the two workers on the Traefik NodePort are ALB targets."
+  }
+  assert {
+    condition     = aws_lb_listener.http.default_action[0].type == "redirect" && aws_lb_listener.https.protocol == "HTTPS"
+    error_message = "HTTP must redirect to HTTPS."
   }
 }

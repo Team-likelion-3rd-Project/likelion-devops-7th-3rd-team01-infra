@@ -4,3 +4,5 @@ availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
 environment        = "practice"
 # ALB → 워커 Traefik NodePort (온프렘과 같은 30080). 헬스체크도 같은 포트
 alb_target_ports = [30080]
+# 서비스 도메인 (접속 주소라 저장소에 두지 않음). api.<domain_name>이 ALB 주소가 된다
+domain_name = "news.example.com"
