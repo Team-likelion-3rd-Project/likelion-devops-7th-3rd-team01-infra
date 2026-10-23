@@ -61,13 +61,49 @@ kubectl delete pod t1 t2
 ```bash
 # 멈추기 (저녁)
 IDS=$(terraform output -json nodes | python3 -c 'import json,sys;print(" ".join(v["id"] for v in json.load(sys.stdin).values()))')
-aws ec2 stop-instances --instance-ids $IDS
+aws ec2 stop-instances --instance-ids ${=IDS}     # zsh(맥). bash는 $IDS
 terraform apply -var nat_mode=none          # NAT·EIP 삭제
 
-# 다시 켜기 (아침)
+# 다시 켜기 (아침): NAT를 먼저 만들고 EC2를 켠다 (NAT 없이 켜면 SSM·이미지 받기가 안 됨)
 terraform apply                             # NAT 1개 다시 생성 (기본 single)
-aws ec2 start-instances --instance-ids $IDS
+aws ec2 start-instances --instance-ids ${=IDS}
 ```
 
 EC2를 중지했다 켜도 사설 IP가 그대로라 클러스터는 그대로 돌아온다. NAT를 다시 만들면 나가는 공인 IP가 바뀐다(외부에 등록한 IP가 없어 영향 없음).
 장애 시나리오 C2(한쪽 AZ 중지)를 시험할 때만 `-var nat_mode=per_az`로 AZ마다 NAT를 둔다.
+
+## 5. 애드온 (cp에서, root)
+
+SSM 세션은 ssm-user로 시작하므로 `sudo -i`로 root가 된 뒤 kubectl을 쓴다 (kubeconfig는 root에만 있음).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.0/components.yaml
+kubectl -n kube-system patch deployment metrics-server --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+git clone --depth 1 -b develop https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra.git /root/infra
+helm repo add traefik https://traefik.github.io/charts && helm repo update
+helm upgrade --install traefik traefik/traefik --version 41.7.1 -n traefik --create-namespace \
+  -f /root/infra/onprem/traefik-values.yaml --set metrics.prometheus.serviceMonitor.enabled=false
+```
+
+Calico: operator(v3.32.2, 온프렘과 동일)를 먼저 `kubectl create`로 설치하고, operator가 뜬 뒤 Installation(VXLAN)을 적용한다. 바로 이어서 적용하면 Installation 종류가 아직 없어 누락된다.
+
+## 6. 앱 준비 (최초 1회, cp에서 root)
+
+```bash
+kubectl create namespace news
+# GHCR 이미지가 비공개라 읽기 전용 토큰(classic, read:packages)으로 pull Secret
+read -s -p "GHCR 토큰: " GHCR_PAT; echo
+kubectl -n news create secret docker-registry ghcr-pull --docker-server=ghcr.io \
+  --docker-username=<GitHub 사용자> --docker-password="$GHCR_PAT"; unset GHCR_PAT
+kubectl -n news patch serviceaccount default -p '{"imagePullSecrets":[{"name":"ghcr-pull"}]}'
+# 앱 Secret (값은 클러스터에서 바로 생성, 화면·채팅에 남기지 않음)
+kubectl -n news create secret generic mysql-secret --from-literal=password="$(openssl rand -hex 24)"
+kubectl -n news create secret generic app-secret --from-literal=JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
+```
+
+RDS 앱 계정 `news_app`은 관리자 비밀번호(Secrets Manager, `terraform output db_master_secret_arn`)로 임시 mysql 파드에서 만든다:
+`CREATE USER news_app@'%' IDENTIFIED BY <mysql-secret 값>; GRANT ALL PRIVILEGES ON news.* TO news_app@'%';`
+
+이후 앱 배포는 `deploy-aws` workflow가 한다 (k8s/cloud/README.md).
