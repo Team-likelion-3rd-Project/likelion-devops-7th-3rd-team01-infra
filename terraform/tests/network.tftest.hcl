@@ -9,6 +9,9 @@ mock_provider "aws" {
   mock_data "aws_iam_openid_connect_provider" {
     defaults = { arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" }
   }
+  mock_resource "aws_cloudfront_function" {
+    defaults = { arn = "arn:aws:cloudfront::123456789012:function/team01-newsbrief-spa-rewrite" }
+  }
   mock_resource "aws_route_table" {
     defaults = { route = [] }
   }
@@ -36,6 +39,17 @@ mock_provider "aws" {
   }
   mock_resource "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/team01-k8s-node-mock" }
+  }
+}
+
+# CloudFront용 us-east-1 인증서 (frontend.tf의 provider alias)
+mock_provider "aws" {
+  alias = "us_east_1"
+  mock_resource "aws_acm_certificate" {
+    defaults = { arn = "arn:aws:acm:us-east-1:123456789012:certificate/mock" }
+  }
+  mock_resource "aws_acm_certificate_validation" {
+    defaults = { certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/mock" }
   }
 }
 
@@ -214,5 +228,26 @@ run "alb_contract" {
   assert {
     condition     = aws_lb_listener.http.default_action[0].type == "redirect" && aws_lb_listener.https.protocol == "HTTPS"
     error_message = "HTTP must redirect to HTTPS."
+  }
+}
+
+run "frontend_contract" {
+  command = apply
+
+  assert {
+    condition     = aws_s3_bucket.frontend.force_destroy == true
+    error_message = "Frontend bucket must allow destroy with files for the M5 recreate test."
+  }
+  assert {
+    condition     = toset(aws_cloudfront_distribution.frontend.aliases) == toset(["app.news.example.com"])
+    error_message = "CloudFront must serve the app. host only."
+  }
+  assert {
+    condition     = length(aws_cloudfront_distribution.frontend.custom_error_response) == 0
+    error_message = "SPA fallback must use the CloudFront Function, not distribution-wide error responses."
+  }
+  assert {
+    condition     = length(aws_cloudfront_distribution.frontend.ordered_cache_behavior) == 1 && aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
+    error_message = "Only /api/* goes to the API origin."
   }
 }
