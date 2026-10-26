@@ -215,11 +215,26 @@ run "reject_bad_nat_mode" {
   expect_failures = [var.nat_mode]
 }
 
+# modules/data 안쪽을 직접 검사한다.
 run "data_contract" {
   command = apply
 
+  module {
+    source = "./modules/data"
+  }
+
+  variables {
+    data_subnet_ids         = ["subnet-data-a", "subnet-data-b"]
+    db_security_group_id    = "sg-db"
+    redis_security_group_id = "sg-redis"
+    db_instance_class       = "db.t3.micro"
+    db_multi_az             = false
+    redis_node_type         = "cache.t3.micro"
+    redis_replicas          = false
+  }
+
   assert {
-    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, module.network.security_group_ids["db"])
+    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, var.db_security_group_id)
     error_message = "RDS must be private, encrypted, password managed by Secrets Manager, db SG only."
   }
   assert {
@@ -227,7 +242,7 @@ run "data_contract" {
     error_message = "Default to single-AZ RDS and single Redis node for cost."
   }
   assert {
-    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([module.network.subnet_ids["data_a"], module.network.subnet_ids["data_b"]])
+    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset(var.data_subnet_ids)
     error_message = "DB must sit in the data subnets."
   }
 }

@@ -147,3 +147,29 @@ moved {
   from = aws_vpc_security_group_egress_rule.app_http
   to   = module.network.aws_vpc_security_group_egress_rule.app_http
 }
+
+# data 모듈 이동
+moved {
+  from = aws_db_subnet_group.main
+  to   = module.data.aws_db_subnet_group.main
+}
+
+moved {
+  from = aws_db_parameter_group.mysql
+  to   = module.data.aws_db_parameter_group.mysql
+}
+
+moved {
+  from = aws_db_instance.main
+  to   = module.data.aws_db_instance.main
+}
+
+moved {
+  from = aws_elasticache_subnet_group.main
+  to   = module.data.aws_elasticache_subnet_group.main
+}
+
+moved {
+  from = aws_elasticache_replication_group.main
+  to   = module.data.aws_elasticache_replication_group.main
+}
