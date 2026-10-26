@@ -83,7 +83,7 @@ plan 단계에는 아래 설정이 필요합니다. (레포 Settings → Secrets
 
 | 변수 | 내용 |
 |------|------|
-| `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` 값. `modules/identity`가 만드는 읽기 전용(ReadOnlyAccess) 역할이며, 이 레포의 `pull_request` 실행만 맡을 수 있습니다 |
+| `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` 값. `modules/identity`가 만드는 읽기 전용 역할(우리 스택의 조회 권한과 상태 파일 읽기만 허용)이며, 이 레포의 `pull_request` 실행만 맡을 수 있습니다 |
 | `TFVARS` | `terraform.tfvars` 내용 (비밀값 없이 지역·AZ·도메인 등만) |
 
 두 변수가 없거나 포크에서 온 PR이면 plan은 건너뛰고 나머지 검사만 돌립니다.
