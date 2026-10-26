@@ -10,7 +10,7 @@
 | `modules/data` | RDS(MySQL), ElastiCache(Redis) |
 | `modules/compute` | EC2 노드(kubeadm), 노드 IAM 역할, ALB, 인증서 |
 | `modules/frontend` | S3, CloudFront, 배포용 IAM 역할. us-east-1 인증서는 별칭 provider가 필요해 루트 `frontend.tf`에 둡니다 |
-| `modules/identity` | GitHub OIDC 공급자 참조 |
+| `modules/identity` | GitHub OIDC 공급자 참조, PR의 plan용 읽기 전용 역할 |
 
 값은 루트 `variables.tf`가 받고, 모듈끼리 값(서브넷 ID 등)을 주고받을 때는 모듈 출력만 씁니다.
 
@@ -73,9 +73,20 @@ terraform test
 
 테스트는 mock provider로 모듈 배치와 입력 제한을 검증합니다. AWS 인증이나 실제 리소스 생성은 하지 않습니다.
 
-PR을 올리면 `.github/workflows/terraform-check.yml`이 GitHub 호스팅 runner에서 같은 검사(fmt, init, validate, test)를 돌리고 결과를 PR 댓글로 남깁니다. AWS 자격 증명은 쓰지 않습니다. Terraform 버전은 1.16.6으로 고정했습니다.
+## PR 자동 검사
 
-원격 상태가 이미 초기화된 로컬 환경에서는, 모듈 이동(`moved`) 적용 전에 `terraform validate`가 "Provider configuration not present" 에러를 낼 수 있습니다. 이건 apply가 상태 주소를 옮기면 사라집니다. `-backend=false`로 초기화한 깨끗한 환경(CI)에서는 나지 않습니다.
+PR을 올리면 `.github/workflows/terraform-check.yml`이 GitHub 호스팅 runner에서 fmt, init, validate, test를 돌리고, 읽기 전용 AWS 역할로 `plan`까지 돌려 결과를 PR 댓글 하나로 남깁니다. Terraform 버전은 1.16.6으로 고정했습니다.
+
+plan 댓글에는 **리소스 주소와 동작(create/update/delete)만** 올립니다. 이 레포는 공개라 Actions 로그와 댓글이 누구에게나 보이기 때문에, plan 원문은 어디에도 남기지 않습니다.
+
+plan 단계에는 아래 설정이 필요합니다. (레포 Settings → Secrets and variables → Actions → Variables)
+
+| 변수 | 내용 |
+|------|------|
+| `AWS_PLAN_ROLE_ARN` | `terraform output plan_role_arn` 값. `modules/identity`가 만드는 읽기 전용(ReadOnlyAccess) 역할이며, 이 레포의 `pull_request` 실행만 맡을 수 있습니다 |
+| `TFVARS` | `terraform.tfvars` 내용 (비밀값 없이 지역·AZ·도메인 등만) |
+
+두 변수가 없거나 포크에서 온 PR이면 plan은 건너뛰고 나머지 검사만 돌립니다.
 
 ## 비용 주의
 
