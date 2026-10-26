@@ -1,17 +1,17 @@
 output "vpc_id" {
-  value = aws_vpc.main.id
+  value = module.network.vpc_id
 }
 
 output "subnet_ids" {
-  value = { for k, v in aws_subnet.tier : k => v.id }
+  value = module.network.subnet_ids
 }
 
 output "security_group_ids" {
-  value = { for k, v in aws_security_group.tier : k => v.id }
+  value = module.network.security_group_ids
 }
 
 output "nat_public_ips" {
-  value = { for k, v in aws_eip.nat : k => v.public_ip }
+  value = module.network.nat_public_ips
 }
 
 output "nodes" {

@@ -3,7 +3,7 @@
 
 resource "aws_db_subnet_group" "main" {
   name_prefix = "team01-db-"
-  subnet_ids  = [aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id]
+  subnet_ids  = [module.network.subnet_ids["data_a"], module.network.subnet_ids["data_b"]]
 }
 
 # 온프렘 MySQL(custom.cnf)과 같은 설정: utf8mb4, UTC, 한국어 전문 검색용 ngram 2
@@ -48,7 +48,7 @@ resource "aws_db_instance" "main" {
   manage_master_user_password = true
   db_subnet_group_name        = aws_db_subnet_group.main.name
   parameter_group_name        = aws_db_parameter_group.mysql.name
-  vpc_security_group_ids      = [aws_security_group.tier["db"].id]
+  vpc_security_group_ids      = [module.network.security_group_ids["db"]]
   publicly_accessible         = false
   multi_az                    = var.db_multi_az
   backup_retention_period     = 7
@@ -60,7 +60,7 @@ resource "aws_db_instance" "main" {
 
 resource "aws_elasticache_subnet_group" "main" {
   name       = "team01-redis"
-  subnet_ids = [aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id]
+  subnet_ids = [module.network.subnet_ids["data_a"], module.network.subnet_ids["data_b"]]
 }
 
 resource "aws_elasticache_replication_group" "main" {
@@ -74,7 +74,7 @@ resource "aws_elasticache_replication_group" "main" {
   multi_az_enabled           = var.redis_replicas
   port                       = 6379
   subnet_group_name          = aws_elasticache_subnet_group.main.name
-  security_group_ids         = [aws_security_group.tier["redis"].id]
+  security_group_ids         = [module.network.security_group_ids["redis"]]
   at_rest_encryption_enabled = true
   # 앱(Spring)이 평문 Redis로 접속한다. 데이터 서브넷 + 앱 SG에서만 접근 가능
   transit_encryption_enabled = false

@@ -1,5 +1,5 @@
 mock_provider "aws" {
-  # 프론트 배포(frontend.tf)용 가짜 데이터
+  # 프론트 배포(modules/frontend)가 가져오는 데이터
   mock_data "aws_caller_identity" {
     defaults = { account_id = "123456789012" }
   }
@@ -58,11 +58,18 @@ variables {
   availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
   alb_target_ports   = [30080]
   domain_name        = "news.example.com"
+  environment        = "practice"
 }
 
+# modules/network 안쪽을 직접 검사한다.
 run "network_contract" {
   # Mock apply only: no AWS credentials, API calls, or real resources.
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "per_az"
   }
@@ -105,6 +112,7 @@ run "network_contract" {
   }
 }
 
+# 검증(validation)은 루트 변수에 남아 있으므로 루트 기준 그대로 둔다.
 run "reject_duplicate_azs" {
   command = plan
   variables {
@@ -154,7 +162,7 @@ run "cluster_contract" {
     error_message = "Three nodes without public IPv4."
   }
   assert {
-    condition     = aws_instance.node["cp"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-a"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-b"].subnet_id == aws_subnet.tier["app_b"].id
+    condition     = aws_instance.node["cp"].subnet_id == module.network.subnet_ids["app_a"] && aws_instance.node["worker-a"].subnet_id == module.network.subnet_ids["app_a"] && aws_instance.node["worker-b"].subnet_id == module.network.subnet_ids["app_b"]
     error_message = "Nodes must sit in the private app subnets, workers split across AZs."
   }
   assert {
@@ -162,13 +170,18 @@ run "cluster_contract" {
     error_message = "IMDSv2 required, hop limit 2 so pods can use the node role."
   }
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == aws_security_group.tier["app"].id && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
+    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == module.network.security_group_ids["app"] && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
     error_message = "Nodes in the app SG must reach each other."
   }
 }
 
 run "single_nat" {
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "single"
   }
@@ -180,6 +193,11 @@ run "single_nat" {
 
 run "no_nat" {
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "none"
   }
@@ -201,7 +219,7 @@ run "data_contract" {
   command = apply
 
   assert {
-    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, aws_security_group.tier["db"].id)
+    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, module.network.security_group_ids["db"])
     error_message = "RDS must be private, encrypted, password managed by Secrets Manager, db SG only."
   }
   assert {
@@ -209,7 +227,7 @@ run "data_contract" {
     error_message = "Default to single-AZ RDS and single Redis node for cost."
   }
   assert {
-    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id])
+    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([module.network.subnet_ids["data_a"], module.network.subnet_ids["data_b"]])
     error_message = "DB must sit in the data subnets."
   }
 }
@@ -218,7 +236,7 @@ run "alb_contract" {
   command = apply
 
   assert {
-    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([aws_subnet.tier["public_a"].id, aws_subnet.tier["public_b"].id]) && contains(aws_lb.main.security_groups, aws_security_group.tier["alb"].id)
+    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([module.network.subnet_ids["public_a"], module.network.subnet_ids["public_b"]]) && contains(aws_lb.main.security_groups, module.network.security_group_ids["alb"])
     error_message = "ALB must be internet-facing in the public subnets with the ALB SG."
   }
   assert {
@@ -231,7 +249,7 @@ run "alb_contract" {
   }
 }
 
-# frontend.tf의 리소스는 modules/frontend로 옮겼다. 모듈을 직접 대상으로 검사한다.
+# frontend 리소스는 modules/frontend로 옮겼다. 모듈을 직접 대상으로 검사한다.
 run "frontend_contract" {
   command = apply
 

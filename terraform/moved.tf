@@ -50,3 +50,100 @@ moved {
   from = aws_iam_role_policy.frontend_deploy
   to   = module.frontend.aws_iam_role_policy.frontend_deploy
 }
+
+
+# network 모듈 이동
+moved {
+  from = aws_vpc.main
+  to   = module.network.aws_vpc.main
+}
+
+moved {
+  from = aws_subnet.tier
+  to   = module.network.aws_subnet.tier
+}
+
+moved {
+  from = aws_internet_gateway.main
+  to   = module.network.aws_internet_gateway.main
+}
+
+moved {
+  from = aws_eip.nat
+  to   = module.network.aws_eip.nat
+}
+
+moved {
+  from = aws_nat_gateway.zonal
+  to   = module.network.aws_nat_gateway.zonal
+}
+
+moved {
+  from = aws_route_table.public
+  to   = module.network.aws_route_table.public
+}
+
+moved {
+  from = aws_route_table.app
+  to   = module.network.aws_route_table.app
+}
+
+moved {
+  from = aws_route_table.data
+  to   = module.network.aws_route_table.data
+}
+
+moved {
+  from = aws_route.public_internet
+  to   = module.network.aws_route.public_internet
+}
+
+moved {
+  from = aws_route.app_internet
+  to   = module.network.aws_route.app_internet
+}
+
+moved {
+  from = aws_route_table_association.tier
+  to   = module.network.aws_route_table_association.tier
+}
+
+moved {
+  from = aws_security_group.tier
+  to   = module.network.aws_security_group.tier
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.alb_web
+  to   = module.network.aws_vpc_security_group_ingress_rule.alb_web
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.app_from_alb
+  to   = module.network.aws_vpc_security_group_ingress_rule.app_from_alb
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.alb_to_app
+  to   = module.network.aws_vpc_security_group_egress_rule.alb_to_app
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.data_from_app
+  to   = module.network.aws_vpc_security_group_ingress_rule.data_from_app
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.app_to_data
+  to   = module.network.aws_vpc_security_group_egress_rule.app_to_data
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.app_https
+  to   = module.network.aws_vpc_security_group_egress_rule.app_https
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.app_http
+  to   = module.network.aws_vpc_security_group_egress_rule.app_http
+}
