@@ -231,8 +231,23 @@ run "alb_contract" {
   }
 }
 
+# frontend.tf의 리소스는 modules/frontend로 옮겼다. 모듈을 직접 대상으로 검사한다.
 run "frontend_contract" {
   command = apply
+
+  module {
+    source = "./modules/frontend"
+  }
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  variables {
+    domain_name              = "news.example.com"
+    github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+  }
 
   assert {
     condition     = aws_s3_bucket.frontend.force_destroy == true
@@ -249,5 +264,15 @@ run "frontend_contract" {
   assert {
     condition     = length(aws_cloudfront_distribution.frontend.ordered_cache_behavior) == 1 && aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
     error_message = "Only /api/* goes to the API origin."
+  }
+}
+
+# 루트가 모듈을 올바르게 연결했는지 본다. 출력 이름은 GitHub Variables 등록에 쓰이므로 그대로여야 한다.
+run "frontend_wiring" {
+  command = apply
+
+  assert {
+    condition     = output.frontend_bucket_name == "team01-newsbrief-frontend-123456789012"
+    error_message = "Root output must expose the frontend bucket from the module."
   }
 }
