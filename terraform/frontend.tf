@@ -19,7 +19,7 @@ module "frontend" {
   source = "./modules/frontend"
 
   domain_name              = var.domain_name
-  github_oidc_provider_arn = data.aws_iam_openid_connect_provider.github.arn
+  github_oidc_provider_arn = module.identity.github_oidc_provider_arn
 
   providers = {
     aws           = aws
