@@ -1,5 +1,5 @@
 mock_provider "aws" {
-  # 프론트 배포(frontend.tf)용 가짜 데이터
+  # 프론트 배포(modules/frontend)가 가져오는 데이터
   mock_data "aws_caller_identity" {
     defaults = { account_id = "123456789012" }
   }
@@ -58,11 +58,18 @@ variables {
   availability_zones = ["ap-northeast-2a", "ap-northeast-2c"]
   alb_target_ports   = [30080]
   domain_name        = "news.example.com"
+  environment        = "practice"
 }
 
+# modules/network 안쪽을 직접 검사한다.
 run "network_contract" {
   # Mock apply only: no AWS credentials, API calls, or real resources.
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "per_az"
   }
@@ -105,6 +112,7 @@ run "network_contract" {
   }
 }
 
+# 검증(validation)은 루트 변수에 남아 있으므로 루트 기준 그대로 둔다.
 run "reject_duplicate_azs" {
   command = plan
   variables {
@@ -145,16 +153,44 @@ run "reject_out_of_range_port" {
   expect_failures = [var.alb_target_ports]
 }
 
+# modules/compute 안쪽을 직접 검사한다. 네트워크 값은 가짜 ID를 넘긴다.
 run "cluster_contract" {
   # Mock apply only: EC2 nodes, IAM role, node-to-node rules.
   command = apply
+
+  module {
+    source = "./modules/compute"
+  }
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    subnet_ids = {
+      app_a    = "subnet-app-a"
+      app_b    = "subnet-app-b"
+      public_a = "subnet-public-a"
+      public_b = "subnet-public-b"
+    }
+    security_group_ids = {
+      alb   = "sg-alb"
+      app   = "sg-app"
+      db    = "sg-db"
+      redis = "sg-redis"
+    }
+    domain_name          = "news.example.com"
+    alb_target_ports     = [30080]
+    cp_instance_type     = "t3.medium"
+    worker_instance_type = "t3.medium"
+    k8s_minor            = "1.31"
+    k8s_version          = "1.31.4"
+    bedrock_policy_name  = "newsbrief-bedrock-invoke"
+  }
 
   assert {
     condition     = length(aws_instance.node) == 3 && alltrue([for n in aws_instance.node : n.associate_public_ip_address == false])
     error_message = "Three nodes without public IPv4."
   }
   assert {
-    condition     = aws_instance.node["cp"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-a"].subnet_id == aws_subnet.tier["app_a"].id && aws_instance.node["worker-b"].subnet_id == aws_subnet.tier["app_b"].id
+    condition     = aws_instance.node["cp"].subnet_id == var.subnet_ids["app_a"] && aws_instance.node["worker-a"].subnet_id == var.subnet_ids["app_a"] && aws_instance.node["worker-b"].subnet_id == var.subnet_ids["app_b"]
     error_message = "Nodes must sit in the private app subnets, workers split across AZs."
   }
   assert {
@@ -162,13 +198,18 @@ run "cluster_contract" {
     error_message = "IMDSv2 required, hop limit 2 so pods can use the node role."
   }
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == aws_security_group.tier["app"].id && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
+    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == var.security_group_ids["app"] && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
     error_message = "Nodes in the app SG must reach each other."
   }
 }
 
 run "single_nat" {
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "single"
   }
@@ -180,6 +221,11 @@ run "single_nat" {
 
 run "no_nat" {
   command = apply
+
+  module {
+    source = "./modules/network"
+  }
+
   variables {
     nat_mode = "none"
   }
@@ -197,11 +243,26 @@ run "reject_bad_nat_mode" {
   expect_failures = [var.nat_mode]
 }
 
+# modules/data 안쪽을 직접 검사한다.
 run "data_contract" {
   command = apply
 
+  module {
+    source = "./modules/data"
+  }
+
+  variables {
+    data_subnet_ids         = ["subnet-data-a", "subnet-data-b"]
+    db_security_group_id    = "sg-db"
+    redis_security_group_id = "sg-redis"
+    db_instance_class       = "db.t3.micro"
+    db_multi_az             = false
+    redis_node_type         = "cache.t3.micro"
+    redis_replicas          = false
+  }
+
   assert {
-    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, aws_security_group.tier["db"].id)
+    condition     = aws_db_instance.main.publicly_accessible == false && aws_db_instance.main.storage_encrypted && aws_db_instance.main.manage_master_user_password && contains(aws_db_instance.main.vpc_security_group_ids, var.db_security_group_id)
     error_message = "RDS must be private, encrypted, password managed by Secrets Manager, db SG only."
   }
   assert {
@@ -209,7 +270,7 @@ run "data_contract" {
     error_message = "Default to single-AZ RDS and single Redis node for cost."
   }
   assert {
-    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset([aws_subnet.tier["data_a"].id, aws_subnet.tier["data_b"].id])
+    condition     = toset(aws_db_subnet_group.main.subnet_ids) == toset(var.data_subnet_ids)
     error_message = "DB must sit in the data subnets."
   }
 }
@@ -217,8 +278,35 @@ run "data_contract" {
 run "alb_contract" {
   command = apply
 
+  module {
+    source = "./modules/compute"
+  }
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    subnet_ids = {
+      app_a    = "subnet-app-a"
+      app_b    = "subnet-app-b"
+      public_a = "subnet-public-a"
+      public_b = "subnet-public-b"
+    }
+    security_group_ids = {
+      alb   = "sg-alb"
+      app   = "sg-app"
+      db    = "sg-db"
+      redis = "sg-redis"
+    }
+    domain_name          = "news.example.com"
+    alb_target_ports     = [30080]
+    cp_instance_type     = "t3.medium"
+    worker_instance_type = "t3.medium"
+    k8s_minor            = "1.31"
+    k8s_version          = "1.31.4"
+    bedrock_policy_name  = "newsbrief-bedrock-invoke"
+  }
+
   assert {
-    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([aws_subnet.tier["public_a"].id, aws_subnet.tier["public_b"].id]) && contains(aws_lb.main.security_groups, aws_security_group.tier["alb"].id)
+    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([var.subnet_ids["public_a"], var.subnet_ids["public_b"]]) && contains(aws_lb.main.security_groups, var.security_group_ids["alb"])
     error_message = "ALB must be internet-facing in the public subnets with the ALB SG."
   }
   assert {
@@ -231,8 +319,19 @@ run "alb_contract" {
   }
 }
 
+# frontend 리소스는 modules/frontend로 옮겼다. 모듈을 직접 대상으로 검사한다.
 run "frontend_contract" {
   command = apply
+
+  module {
+    source = "./modules/frontend"
+  }
+
+  variables {
+    domain_name              = "news.example.com"
+    certificate_arn          = "arn:aws:acm:us-east-1:123456789012:certificate/mock"
+    github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+  }
 
   assert {
     condition     = aws_s3_bucket.frontend.force_destroy == true
@@ -249,5 +348,15 @@ run "frontend_contract" {
   assert {
     condition     = length(aws_cloudfront_distribution.frontend.ordered_cache_behavior) == 1 && aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
     error_message = "Only /api/* goes to the API origin."
+  }
+}
+
+# 루트가 모듈을 올바르게 연결했는지 본다. 출력 이름은 GitHub Variables 등록에 쓰이므로 그대로여야 한다.
+run "frontend_wiring" {
+  command = apply
+
+  assert {
+    condition     = output.frontend_bucket_name == "team01-newsbrief-frontend-123456789012"
+    error_message = "Root output must expose the frontend bucket from the module."
   }
 }

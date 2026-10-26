@@ -17,14 +17,14 @@ data "aws_ssm_parameter" "ubuntu" {
 
 # 노드끼리는 모든 통신 허용 (API 서버 6443, kubelet 10250, Calico VXLAN 4789/udp, NodePort, 파드 간 통신)
 resource "aws_vpc_security_group_ingress_rule" "app_self" {
-  security_group_id            = aws_security_group.tier["app"].id
-  referenced_security_group_id = aws_security_group.tier["app"].id
+  security_group_id            = var.security_group_ids["app"]
+  referenced_security_group_id = var.security_group_ids["app"]
   ip_protocol                  = "-1"
 }
 
 resource "aws_vpc_security_group_egress_rule" "app_self" {
-  security_group_id            = aws_security_group.tier["app"].id
-  referenced_security_group_id = aws_security_group.tier["app"].id
+  security_group_id            = var.security_group_ids["app"]
+  referenced_security_group_id = var.security_group_ids["app"]
   ip_protocol                  = "-1"
 }
 
@@ -32,8 +32,8 @@ resource "aws_instance" "node" {
   for_each                    = local.nodes
   ami                         = data.aws_ssm_parameter.ubuntu.value
   instance_type               = each.value.type
-  subnet_id                   = aws_subnet.tier[each.value.subnet].id
-  vpc_security_group_ids      = [aws_security_group.tier["app"].id]
+  subnet_id                   = var.subnet_ids[each.value.subnet]
+  vpc_security_group_ids      = [var.security_group_ids["app"]]
   iam_instance_profile        = aws_iam_instance_profile.node.name
   associate_public_ip_address = false
   user_data = templatefile("${path.module}/node-init.sh", {
