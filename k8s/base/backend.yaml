@@ -33,7 +33,13 @@ spec:
       - name: api
         image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend:IMAGE_TAG
         ports:
-        - containerPort: 8080
+        - name: http   # PodMonitor(k8s/onprem/monitoring/backend-podmonitor.yaml)가 이름으로 찾는다
+          containerPort: 8080
+        # 롤링 배포 중 실패 0건 (M5-9): 엔드포인트에서 빠지는 동안 10초 기다린 뒤 종료 신호를 보낸다.
+        # 앱은 처리 중 요청을 최대 15초 기다린다 → 10 + 15 = 25초 < terminationGracePeriodSeconds 30초
+        lifecycle:
+          preStop:
+            exec: {command: ['sleep', '10']}
         env:
         - name: APP_ROLE
           value: api
@@ -94,8 +100,10 @@ spec:
       containers:
       - name: worker
         image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend:IMAGE_TAG
+        # 워커는 요청을 받지 않아 preStop이 필요 없다. 처리 중 질문을 최대 40초 기다리고 못 끝내면 대기열로 돌려놓는다 (< 60초)
         ports:
-        - containerPort: 8080
+        - name: http
+          containerPort: 8080
         env:
         - name: APP_ROLE
           value: worker

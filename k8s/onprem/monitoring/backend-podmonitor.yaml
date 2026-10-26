@@ -1,0 +1,16 @@
+# 백엔드 앱 지표 수집 (M5-10): 질문 대기열 길이, FAILED 수, 마지막 배치 소요 시간 등 newsbrief_* 지표
+# kubectl apply -f k8s/onprem/monitoring/backend-podmonitor.yaml
+# /actuator/prometheus는 인그레스(/api만)로 열리지 않아 클러스터 안에서만 보인다
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: newsbrief-backend
+  namespace: news
+spec:
+  selector:
+    matchExpressions:
+    - {key: app, operator: In, values: [api, worker]}
+  podMetricsEndpoints:
+  - port: http
+    path: /actuator/prometheus
+    interval: 15s
