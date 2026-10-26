@@ -173,3 +173,74 @@ moved {
   from = aws_elasticache_replication_group.main
   to   = module.data.aws_elasticache_replication_group.main
 }
+
+# compute 모듈 이동
+moved {
+  from = aws_acm_certificate.main
+  to   = module.compute.aws_acm_certificate.main
+}
+
+moved {
+  from = aws_acm_certificate_validation.main
+  to   = module.compute.aws_acm_certificate_validation.main
+}
+
+moved {
+  from = aws_lb.main
+  to   = module.compute.aws_lb.main
+}
+
+moved {
+  from = aws_lb_target_group.traefik
+  to   = module.compute.aws_lb_target_group.traefik
+}
+
+moved {
+  from = aws_lb_target_group_attachment.worker
+  to   = module.compute.aws_lb_target_group_attachment.worker
+}
+
+moved {
+  from = aws_lb_listener.http
+  to   = module.compute.aws_lb_listener.http
+}
+
+moved {
+  from = aws_lb_listener.https
+  to   = module.compute.aws_lb_listener.https
+}
+
+moved {
+  from = aws_vpc_security_group_ingress_rule.app_self
+  to   = module.compute.aws_vpc_security_group_ingress_rule.app_self
+}
+
+moved {
+  from = aws_vpc_security_group_egress_rule.app_self
+  to   = module.compute.aws_vpc_security_group_egress_rule.app_self
+}
+
+moved {
+  from = aws_instance.node
+  to   = module.compute.aws_instance.node
+}
+
+moved {
+  from = aws_iam_role.node
+  to   = module.compute.aws_iam_role.node
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.ssm
+  to   = module.compute.aws_iam_role_policy_attachment.ssm
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.bedrock
+  to   = module.compute.aws_iam_role_policy_attachment.bedrock
+}
+
+moved {
+  from = aws_iam_instance_profile.node
+  to   = module.compute.aws_iam_instance_profile.node
+}

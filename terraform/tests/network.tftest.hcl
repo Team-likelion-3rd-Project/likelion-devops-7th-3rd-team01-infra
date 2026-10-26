@@ -153,16 +153,44 @@ run "reject_out_of_range_port" {
   expect_failures = [var.alb_target_ports]
 }
 
+# modules/compute 안쪽을 직접 검사한다. 네트워크 값은 가짜 ID를 넘긴다.
 run "cluster_contract" {
   # Mock apply only: EC2 nodes, IAM role, node-to-node rules.
   command = apply
+
+  module {
+    source = "./modules/compute"
+  }
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    subnet_ids = {
+      app_a    = "subnet-app-a"
+      app_b    = "subnet-app-b"
+      public_a = "subnet-public-a"
+      public_b = "subnet-public-b"
+    }
+    security_group_ids = {
+      alb   = "sg-alb"
+      app   = "sg-app"
+      db    = "sg-db"
+      redis = "sg-redis"
+    }
+    domain_name          = "news.example.com"
+    alb_target_ports     = [30080]
+    cp_instance_type     = "t3.medium"
+    worker_instance_type = "t3.medium"
+    k8s_minor            = "1.31"
+    k8s_version          = "1.31.4"
+    bedrock_policy_name  = "newsbrief-bedrock-invoke"
+  }
 
   assert {
     condition     = length(aws_instance.node) == 3 && alltrue([for n in aws_instance.node : n.associate_public_ip_address == false])
     error_message = "Three nodes without public IPv4."
   }
   assert {
-    condition     = aws_instance.node["cp"].subnet_id == module.network.subnet_ids["app_a"] && aws_instance.node["worker-a"].subnet_id == module.network.subnet_ids["app_a"] && aws_instance.node["worker-b"].subnet_id == module.network.subnet_ids["app_b"]
+    condition     = aws_instance.node["cp"].subnet_id == var.subnet_ids["app_a"] && aws_instance.node["worker-a"].subnet_id == var.subnet_ids["app_a"] && aws_instance.node["worker-b"].subnet_id == var.subnet_ids["app_b"]
     error_message = "Nodes must sit in the private app subnets, workers split across AZs."
   }
   assert {
@@ -170,7 +198,7 @@ run "cluster_contract" {
     error_message = "IMDSv2 required, hop limit 2 so pods can use the node role."
   }
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == module.network.security_group_ids["app"] && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
+    condition     = aws_vpc_security_group_ingress_rule.app_self.referenced_security_group_id == var.security_group_ids["app"] && aws_vpc_security_group_ingress_rule.app_self.ip_protocol == "-1"
     error_message = "Nodes in the app SG must reach each other."
   }
 }
@@ -250,8 +278,35 @@ run "data_contract" {
 run "alb_contract" {
   command = apply
 
+  module {
+    source = "./modules/compute"
+  }
+
+  variables {
+    vpc_id = "vpc-0123456789abcdef0"
+    subnet_ids = {
+      app_a    = "subnet-app-a"
+      app_b    = "subnet-app-b"
+      public_a = "subnet-public-a"
+      public_b = "subnet-public-b"
+    }
+    security_group_ids = {
+      alb   = "sg-alb"
+      app   = "sg-app"
+      db    = "sg-db"
+      redis = "sg-redis"
+    }
+    domain_name          = "news.example.com"
+    alb_target_ports     = [30080]
+    cp_instance_type     = "t3.medium"
+    worker_instance_type = "t3.medium"
+    k8s_minor            = "1.31"
+    k8s_version          = "1.31.4"
+    bedrock_policy_name  = "newsbrief-bedrock-invoke"
+  }
+
   assert {
-    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([module.network.subnet_ids["public_a"], module.network.subnet_ids["public_b"]]) && contains(aws_lb.main.security_groups, module.network.security_group_ids["alb"])
+    condition     = aws_lb.main.internal == false && toset(aws_lb.main.subnets) == toset([var.subnet_ids["public_a"], var.subnet_ids["public_b"]]) && contains(aws_lb.main.security_groups, var.security_group_ids["alb"])
     error_message = "ALB must be internet-facing in the public subnets with the ALB SG."
   }
   assert {

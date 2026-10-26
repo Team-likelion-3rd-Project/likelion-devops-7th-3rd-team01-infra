@@ -21,8 +21,8 @@ resource "aws_lb" "main" {
   name                       = "team01-alb"
   load_balancer_type         = "application"
   internal                   = false
-  subnets                    = [module.network.subnet_ids["public_a"], module.network.subnet_ids["public_b"]]
-  security_groups            = [module.network.security_group_ids["alb"]]
+  subnets                    = [var.subnet_ids["public_a"], var.subnet_ids["public_b"]]
+  security_groups            = [var.security_group_ids["alb"]]
   drop_invalid_header_fields = true
 }
 
@@ -30,7 +30,7 @@ resource "aws_lb_target_group" "traefik" {
   name     = "team01-traefik-web"
   port     = tolist(var.alb_target_ports)[0]
   protocol = "HTTP"
-  vpc_id   = module.network.vpc_id
+  vpc_id   = var.vpc_id
 
   # Traefik Ingress가 /api 경로만 api로 넘기므로 헬스체크도 실제 API로 한다 (Redis 캐시로 가벼움)
   health_check {
