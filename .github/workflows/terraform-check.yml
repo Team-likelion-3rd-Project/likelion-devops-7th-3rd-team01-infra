@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: terraform-check-${{ github.ref }}
@@ -22,6 +23,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
+        shell: bash
         working-directory: terraform
     env:
       TF_IN_AUTOMATION: 'true'
@@ -43,11 +45,81 @@ jobs:
           mkdir -p terraform-cli
           unzip -q terraform.zip -d terraform-cli
           echo "$PWD/terraform-cli" >> "$GITHUB_PATH"
+
+      # Each check keeps going on failure so the PR comment can show all results.
       - name: Format
-        run: terraform fmt -check -recursive
+        id: fmt
+        continue-on-error: true
+        run: terraform fmt -check -recursive 2>&1 | tee "$RUNNER_TEMP/fmt.log"
       - name: Initialize without backend
-        run: terraform init -backend=false -lockfile=readonly -input=false
+        id: init
+        continue-on-error: true
+        run: terraform init -backend=false -lockfile=readonly -input=false 2>&1 | tee "$RUNNER_TEMP/init.log"
       - name: Validate
-        run: terraform validate -no-color
+        id: validate
+        if: steps.init.outcome == 'success'
+        continue-on-error: true
+        run: terraform validate -no-color 2>&1 | tee "$RUNNER_TEMP/validate.log"
       - name: Mock topology and input tests
-        run: terraform test -no-color
+        id: test
+        if: steps.init.outcome == 'success'
+        continue-on-error: true
+        run: terraform test -no-color 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      - name: Comment results on PR
+        # Fork PRs get a read-only token, so only comment on same-repo PRs.
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        env:
+          FMT: ${{ steps.fmt.outcome }}
+          INIT: ${{ steps.init.outcome }}
+          VALIDATE: ${{ steps.validate.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const dir = process.env.RUNNER_TEMP;
+            const marker = '<!-- terraform-check -->';
+            const icon = { success: '✅', failure: '❌', skipped: '⏭️', cancelled: '🚫' };
+            const rows = [
+              ['fmt', '포맷 (fmt)', process.env.FMT],
+              ['init', '초기화 (init)', process.env.INIT],
+              ['validate', '문법 검사 (validate)', process.env.VALIDATE],
+              ['test', '모의 테스트 (test)', process.env.TEST],
+            ];
+
+            let body = `${marker}\n## Terraform 검사 결과\n\n| 단계 | 결과 |\n|---|---|\n`;
+            for (const [, label, outcome] of rows) {
+              body += `| ${label} | ${icon[outcome] ?? outcome} |\n`;
+            }
+
+            for (const [key, label, outcome] of rows) {
+              if (outcome !== 'failure') continue;
+              let log = '';
+              try { log = fs.readFileSync(`${dir}/${key}.log`, 'utf8'); } catch (e) {}
+              log = log.split('\n').slice(-40).join('\n').slice(-3000);
+              body += `\n<details><summary>${label} 실패 로그</summary>\n\n\`\`\`\`\n${log}\n\`\`\`\`\n\n</details>\n`;
+            }
+
+            body += `\n[Actions 실행 보기](${process.env.RUN_URL}) · 커밋 ${context.sha.slice(0, 7)}`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Fail if any check failed
+        if: >-
+          steps.fmt.outcome == 'failure' || steps.init.outcome == 'failure' ||
+          steps.validate.outcome == 'failure' || steps.test.outcome == 'failure'
+        run: exit 1
