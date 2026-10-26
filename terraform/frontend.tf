@@ -15,16 +15,29 @@ provider "aws" {
   }
 }
 
+# 별칭 provider(aws.us_east_1)가 필요해서 모듈 밖(루트)에 둔다. 모듈에는 인증서 ARN만 넘긴다.
+# 검증 CNAME은 ALB 인증서와 같은 값이라 이미 등록되어 있으면 바로 발급된다.
+resource "aws_acm_certificate" "frontend" {
+  provider                  = aws.us_east_1
+  domain_name               = var.domain_name
+  subject_alternative_names = ["*.${var.domain_name}"]
+  validation_method         = "DNS"
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_acm_certificate_validation" "frontend" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.frontend.arn
+}
+
 module "frontend" {
   source = "./modules/frontend"
 
   domain_name              = var.domain_name
+  certificate_arn          = aws_acm_certificate_validation.frontend.certificate_arn
   github_oidc_provider_arn = module.identity.github_oidc_provider_arn
-
-  providers = {
-    aws           = aws
-    aws.us_east_1 = aws.us_east_1
-  }
 }
 
 output "frontend_bucket_name" {

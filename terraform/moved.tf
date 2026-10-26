@@ -2,16 +2,6 @@
 # 상태의 주소만 바뀌고 리소스는 다시 만들어지지 않는다.
 # 모든 환경에서 apply가 끝나면 이 파일은 지워도 된다.
 moved {
-  from = aws_acm_certificate.frontend
-  to   = module.frontend.aws_acm_certificate.frontend
-}
-
-moved {
-  from = aws_acm_certificate_validation.frontend
-  to   = module.frontend.aws_acm_certificate_validation.frontend
-}
-
-moved {
   from = aws_s3_bucket.frontend
   to   = module.frontend.aws_s3_bucket.frontend
 }

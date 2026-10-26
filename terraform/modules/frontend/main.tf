@@ -9,23 +9,6 @@ locals {
   api_host          = "api.${var.domain_name}"
 }
 
-# 도메인과 와일드카드 인증서. CloudFront 인증서는 us-east-1에만 만들 수 있어서 aws.us_east_1을 쓴다.
-# 검증 CNAME은 ALB 인증서와 같은 값이라 이미 등록되어 있으면 바로 발급된다.
-resource "aws_acm_certificate" "frontend" {
-  provider                  = aws.us_east_1
-  domain_name               = var.domain_name
-  subject_alternative_names = ["*.${var.domain_name}"]
-  validation_method         = "DNS"
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_acm_certificate_validation" "frontend" {
-  provider        = aws.us_east_1
-  certificate_arn = aws_acm_certificate.frontend.arn
-}
-
 # 빌드 결과물(dist)을 담는 비공개 버킷. S3 주소로 직접 접근하면 거부된다.
 # force_destroy: M5 destroy → apply 재생성 시험에서 파일이 들어 있어도 지울 수 있게 한다.
 resource "aws_s3_bucket" "frontend" {
@@ -137,7 +120,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.frontend.certificate_arn
+    acm_certificate_arn      = var.certificate_arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
   }

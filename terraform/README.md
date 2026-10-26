@@ -9,7 +9,7 @@
 | `modules/network` | VPC, 서브넷 6개, NAT, 라우트 테이블, 보안 그룹 |
 | `modules/data` | RDS(MySQL), ElastiCache(Redis) |
 | `modules/compute` | EC2 노드(kubeadm), 노드 IAM 역할, ALB, 인증서 |
-| `modules/frontend` | S3, CloudFront, 인증서(us-east-1), 배포용 IAM 역할 |
+| `modules/frontend` | S3, CloudFront, 배포용 IAM 역할. us-east-1 인증서는 별칭 provider가 필요해 루트 `frontend.tf`에 둡니다 |
 | `modules/identity` | GitHub OIDC 공급자 참조 |
 
 값은 루트 `variables.tf`가 받고, 모듈끼리 값(서브넷 ID 등)을 주고받을 때는 모듈 출력만 씁니다.

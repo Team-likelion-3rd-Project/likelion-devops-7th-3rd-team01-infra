@@ -327,13 +327,9 @@ run "frontend_contract" {
     source = "./modules/frontend"
   }
 
-  providers = {
-    aws           = aws
-    aws.us_east_1 = aws.us_east_1
-  }
-
   variables {
     domain_name              = "news.example.com"
+    certificate_arn          = "arn:aws:acm:us-east-1:123456789012:certificate/mock"
     github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
   }
 
