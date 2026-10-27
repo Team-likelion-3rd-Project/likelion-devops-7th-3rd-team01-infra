@@ -16,3 +16,6 @@ output "app_role_arn" {
   description = "앱 파드용 Bedrock 역할 ARN"
   value       = module.identity.app_role_arn
 }
+output "apply_role_arn" {
+  value = module.identity.apply_role_arn
+}

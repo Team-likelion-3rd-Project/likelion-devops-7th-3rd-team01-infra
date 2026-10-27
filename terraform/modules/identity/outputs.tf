@@ -11,3 +11,6 @@ output "app_role_arn" {
   description = "앱 파드용 역할 (Bedrock 호출만). M5-3에서 EKS Pod Identity와 연결한다"
   value       = aws_iam_role.app.arn
 }
+output "apply_role_arn" {
+  value = aws_iam_role.apply.arn
+}

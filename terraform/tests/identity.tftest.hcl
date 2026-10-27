@@ -50,3 +50,67 @@ run "app_role_contract" {
     error_message = "앱 역할의 리소스는 지정한 모델로만 제한되어야 한다"
   }
 }
+
+run "apply_role_contract" {
+  command = plan
+
+  module {
+    source = "./modules/identity"
+  }
+
+  # environment 이름이 정확히 일치할 때만 역할을 쓸 수 있다 (와일드카드 금지)
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.apply_trust.statement : (
+        length([for c in s.condition : c if c.variable == "token.actions.githubusercontent.com:sub"]) == 1 &&
+        alltrue([
+          for c in s.condition : (
+            c.test == "StringEquals" &&
+            alltrue([for v in c.values : endswith(v, ":environment:${var.apply_environment_name}") && !strcontains(v, "*")])
+          ) if c.variable == "token.actions.githubusercontent.com:sub"
+        ])
+      )
+    ])
+    error_message = "apply 역할은 정해진 environment 하나만 정확히 일치(StringEquals)로 허용해야 한다"
+  }
+
+  # IAM 쓰기 권한은 어디에도 리소스 *로 열지 않는다 (조회용 ReadIam만 예외)
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.apply.statement :
+      alltrue([for r in s.resources : r != "*"])
+      if coalesce(s.effect, "Allow") == "Allow" && s.sid != "ReadIam" && anytrue([for a in s.actions : startswith(a, "iam:")])
+    ])
+    error_message = "IAM 쓰기 권한은 리소스를 team01-*로 제한해야 한다"
+  }
+
+  # 전체 허용(*, iam:*)은 어디에도 없다
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.apply.statement :
+      !contains(s.actions, "*") && !contains(s.actions, "iam:*")
+      if coalesce(s.effect, "Allow") == "Allow"
+    ])
+    error_message = "apply 역할에 전체 허용 권한이 있으면 안 된다"
+  }
+
+  # 정책을 붙이는 권한은 허용 목록(iam:PolicyARN 조건)이 있어야 한다
+  assert {
+    condition = alltrue([
+      for s in data.aws_iam_policy_document.apply.statement :
+      length([for c in s.condition : c if c.variable == "iam:PolicyARN"]) == 1
+      if contains(s.actions, "iam:AttachRolePolicy")
+      && coalesce(s.effect, "Allow") == "Allow"
+    ])
+    error_message = "AttachRolePolicy는 허용할 정책 목록 조건과 함께여야 한다"
+  }
+
+  # 밖에서 맡는 역할(apply, plan, 프론트 배포)은 apply 역할이 수정하지 못한다
+  assert {
+    condition = length([
+      for s in data.aws_iam_policy_document.apply.statement : s
+      if s.sid == "ProtectOidcRoles" && s.effect == "Deny" && length(s.resources) == 3
+    ]) == 1
+    error_message = "OIDC로 맡는 역할 3개를 보호하는 Deny가 있어야 한다"
+  }
+}
