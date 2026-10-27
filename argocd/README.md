@@ -30,7 +30,7 @@ bash onprem/argocd-setup.sh
 
 - Argo CD 설치(차트 `argo/argo-cd`, 값 `argocd/values.yaml`) → 태그 브랜치 확인 → Application 적용 → 파드 재시작 여부 확인 → Helm 릴리스 기록 삭제
 - 태그 브랜치가 없으면 만들 명령을 출력하고 멈춘다. 맥에서 만든 뒤 다시 실행
-- 설치한 차트 버전: (설치 후 기록)
+- 설치한 차트 버전: argo/argo-cd 10.11.6 (2026-10-27)
 
 ## 화면·관리자 비밀번호
 
