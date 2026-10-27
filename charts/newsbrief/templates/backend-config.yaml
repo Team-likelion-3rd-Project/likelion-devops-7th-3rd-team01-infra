@@ -1,0 +1,12 @@
+# 환경별 백엔드 설정. 값은 values.yaml(공통) + values-<환경>.yaml에서 합쳐진다
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.backend.config }}
+  {{ $key }}: {{ required (printf "backend.config.%s 값이 필요합니다" $key) (toString $value) | quote }}
+  {{- end }}

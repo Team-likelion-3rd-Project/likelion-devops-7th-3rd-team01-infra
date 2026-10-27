@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: worker
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.worker.replicas }}
+  selector:
+    matchLabels: {app: worker}
+  template:
+    metadata:
+      labels: {app: worker}
+    spec:
+      # 처리 중 질문을 최대 40초 기다리고 못 끝내면 대기열로 돌려놓는다 (< 60초)
+      terminationGracePeriodSeconds: 60
+      initContainers:
+      {{- include "newsbrief.waitMysql" . | nindent 6 }}
+      containers:
+      - name: worker
+        image: {{ include "newsbrief.backendImage" . }}
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        {{- include "newsbrief.backendEnv" (dict "role" "worker") | nindent 8 }}
+        envFrom:
+        - configMapRef: {name: backend-config}
+        startupProbe:
+          httpGet: {path: /actuator/health/liveness, port: 8080}
+          periodSeconds: 5
+          failureThreshold: 30
+        livenessProbe:
+          httpGet: {path: /actuator/health/liveness, port: 8080}
+          periodSeconds: 10
+        readinessProbe:
+          httpGet: {path: /actuator/health/readiness, port: 8080}
+          periodSeconds: 10
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 10 }}

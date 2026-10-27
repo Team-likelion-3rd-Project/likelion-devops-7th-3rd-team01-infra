@@ -1,0 +1,5 @@
+# 온프렘 (develop): 클러스터 안 MySQL·Redis, HTTP라 쿠키 Secure 끔, AI는 mock
+backend:
+  config:
+    COOKIE_SECURE: "false"
+    AI_MODE: mock

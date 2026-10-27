@@ -1,0 +1,49 @@
+{{- if .Values.frontend.enabled }}
+# 프론트엔드 (React 빌드 결과를 Nginx로 서빙). AWS는 S3·CloudFront라 만들지 않는다
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: frontend}
+  template:
+    metadata:
+      labels: {app: frontend}
+    spec:
+      containers:
+      - name: frontend
+        image: {{ .Values.frontend.image.repository }}:{{ include "newsbrief.tag" (dict "name" "frontend" "tag" .Values.frontend.image.tag) }}
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          httpGet: {path: /, port: 80}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet: {path: /, port: 80}
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 50m, memory: 64Mi}
+          limits: {memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  selector: {app: frontend}
+  ports:
+  - port: 80
+    targetPort: 80
+{{- end }}

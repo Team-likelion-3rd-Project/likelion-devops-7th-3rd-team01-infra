@@ -1,0 +1,65 @@
+# PR: Helm 차트 lint·렌더링 검사 (M5-6)
+# GitHub 호스팅 러너에서만 실행. 자격 증명·클러스터 접근 없음
+name: chart-check
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/chart-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CHART: charts/newsbrief
+      # 렌더링 검사용 가짜 값 (실제 주소·SHA 아님)
+      SHA_B: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1
+      SHA_F: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Helm 버전
+        run: helm version --short
+
+      - name: lint (온프렘·AWS)
+        run: |
+          helm lint "$CHART" -f "$CHART/values-onprem.yaml" \
+            --set-string backend.image.tag=$SHA_B --set-string frontend.image.tag=$SHA_F
+          helm lint "$CHART" -f "$CHART/values-aws.yaml" --set-string backend.image.tag=$SHA_B \
+            --set mysql.externalHost=db.example.internal --set redis.externalHost=redis.example.internal \
+            --set-string backend.config.CORS_ALLOWED_ORIGINS=https://app.example.com \
+            --set-string backend.config.AI_MODE=mock
+
+      - name: 렌더링 (온프렘·AWS)
+        run: |
+          helm template newsbrief "$CHART" -n news -f "$CHART/values-onprem.yaml" \
+            --set-string backend.image.tag=$SHA_B --set-string frontend.image.tag=$SHA_F > onprem.yaml
+          helm template newsbrief "$CHART" -n news -f "$CHART/values-aws.yaml" --set-string backend.image.tag=$SHA_B \
+            --set mysql.externalHost=db.example.internal --set redis.externalHost=redis.example.internal \
+            --set-string backend.config.CORS_ALLOWED_ORIGINS=https://app.example.com \
+            --set-string backend.config.AI_MODE=mock > aws.yaml
+          echo "온프렘: $(grep -c '^kind:' onprem.yaml)개, AWS: $(grep -c '^kind:' aws.yaml)개 리소스"
+          grep '^kind:' onprem.yaml | sort | uniq -c
+          # AWS에 프론트·MySQL StatefulSet이 들어가면 안 된다
+          ! grep -q '^kind: StatefulSet' aws.yaml
+          ! grep -q 'name: frontend' aws.yaml
+
+      - name: 안전장치 (실패해야 정상)
+        run: |
+          if helm template x "$CHART" -f "$CHART/values-onprem.yaml" >/dev/null 2>&1; then
+            echo "::error::이미지 태그 없이 렌더링되면 안 된다"; exit 1; fi
+          if helm template x "$CHART" -f "$CHART/values-onprem.yaml" \
+               --set-string backend.image.tag=latest --set-string frontend.image.tag=$SHA_F >/dev/null 2>&1; then
+            echo "::error::latest 태그가 통과하면 안 된다"; exit 1; fi
+          if helm template x "$CHART" -f "$CHART/values-aws.yaml" --set-string backend.image.tag=$SHA_B >/dev/null 2>&1; then
+            echo "::error::AWS 주소·설정 없이 렌더링되면 안 된다"; exit 1; fi
+          echo "안전장치 3개 모두 동작"
