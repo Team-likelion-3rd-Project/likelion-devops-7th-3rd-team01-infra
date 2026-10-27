@@ -3,7 +3,7 @@
 `k8s/base` + `k8s/onprem` + `k8s/cloud` 매니페스트를 차트 하나로 옮긴 것이다.
 렌더링 결과는 기존 매니페스트와 같고, Helm 관리 라벨만 추가된다 (selector·파드 라벨은 그대로라 전환만으로 재시작되지 않음).
 
-이 PR은 차트만 추가한다. 배포 workflow는 아직 `k8s/` 매니페스트를 쓰고, Helm 배포 전환은 M5-7에서 한다.
+온프렘 배포(deploy-onprem)는 M5-7부터 이 차트로 한다. AWS 배포(deploy-aws)는 아직 `k8s/base` + `k8s/cloud`를 쓰고, 온프렘 확인 후 전환한다.
 
 ## 구조
 
@@ -51,9 +51,27 @@ helm template newsbrief charts/newsbrief -n news -f charts/newsbrief/values-onpr
 
 차이가 Helm 라벨(`app.kubernetes.io/*`, `helm.sh/chart`) 추가뿐이면 정상이다.
 
-## M5-7에서 할 일 (Helm 배포 전환)
+## 온프렘 Helm 배포 (M5-7)
 
-1. 기존 리소스에 Helm 소유 표시 추가 (`meta.helm.sh/release-name`, `meta.helm.sh/release-namespace` 주석, `app.kubernetes.io/managed-by=Helm` 라벨). 없으면 `helm install`이 "이미 있는 리소스"로 실패한다
-2. 배포 전용 ServiceAccount 권한: Helm은 릴리스 기록을 Secret에 저장한다. Secret 권한을 주지 않으려면 `HELM_DRIVER=configmap`을 쓴다. 온프렘은 StatefulSet(mysql) 권한도 필요하다
-3. 앱 하나만 배포할 때 다른 앱의 이미지 태그를 유지하는 방법 (클러스터의 현재 태그를 읽어 넘기거나, GitOps 단계에서 values에 태그를 기록)
-4. deploy-onprem·deploy-aws를 `helm upgrade --install`로 교체
+- workflow: `.github/workflows/deploy-onprem.yml`이 `helm upgrade --install newsbrief charts/newsbrief -f values-onprem.yaml`로 배포한다
+- 한 앱만 배포할 때 다른 앱의 태그는 클러스터에서 지금 값을 읽어 그대로 넘긴다
+- 릴리스 기록은 ConfigMap에 저장한다 (`HELM_DRIVER=configmap`). 배포 SA에 Secret 권한을 주지 않기 위해서다. 관리자가 helm 명령을 쓸 때도 같은 값을 줘야 같은 릴리스로 보인다
+- 백엔드·프론트 배포가 같은 릴리스를 쓰므로 workflow 동시 실행을 한 줄로 세웠다 (concurrency `deploy-onprem`)
+- 처음 한 번은 기존 리소스를 Helm으로 넘겨야 한다: `bash onprem/helm-adopt.sh` (cp, 관리자 kubeconfig)
+
+관리자 확인 명령
+
+```bash
+export HELM_DRIVER=configmap
+helm list -n news
+helm history newsbrief -n news
+helm get values newsbrief -n news
+```
+
+롤백은 지금처럼 deploy-onprem 수동 실행(app, 이전 SHA)으로 한다. `helm rollback`은 다른 앱 태그까지 같이 되돌리므로 쓰지 않는다.
+
+## 남은 일
+
+1. AWS(deploy-aws)도 같은 방식으로 전환 (`values-aws.yaml`, 주소는 GitHub Variables로 `--set`)
+2. 두 환경 전환 후 `k8s/base`, `k8s/onprem/backend-config.yaml`, `k8s/onprem/ingress.yaml`, `k8s/cloud/*` 정리
+3. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
