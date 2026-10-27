@@ -1,6 +1,8 @@
-# 배포 전용 ServiceAccount (self-hosted runner가 사용)
-# 허용: news 네임스페이스의 앱 리소스 적용·조회, 파드·로그 조회, api 서비스로 /actuator/info 확인
+# 배포 전용 ServiceAccount (self-hosted runner가 사용, 온프렘·AWS 공통)
+# 허용: news 네임스페이스의 앱 리소스 적용·조회·삭제, 파드·로그 조회, api 서비스로 /actuator/info 확인
 # 금지: Secret 조회, 다른 네임스페이스, 노드·RBAC 변경
+# Helm 배포(M5-7): 릴리스 기록은 Secret이 아니라 ConfigMap에 저장한다 (HELM_DRIVER=configmap).
+#   delete는 차트에서 빠진 리소스 정리와 오래된 릴리스 기록 정리(--history-max)에 필요하다
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -14,17 +16,17 @@ metadata:
   namespace: news
 rules:
 - apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch", "create", "patch", "update"]
+  resources: ["deployments", "statefulsets"]
+  verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
 - apiGroups: ["apps"]
   resources: ["replicasets"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["batch"]
   resources: ["cronjobs", "jobs"]
-  verbs: ["get", "list", "watch", "create", "patch", "update"]
+  verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
 - apiGroups: [""]
   resources: ["configmaps", "services"]
-  verbs: ["get", "list", "watch", "create", "patch", "update"]
+  verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
 - apiGroups: [""]
   resources: ["pods", "pods/log", "events"]
   verbs: ["get", "list", "watch"]
@@ -34,7 +36,7 @@ rules:
   verbs: ["get"]
 - apiGroups: ["networking.k8s.io"]
   resources: ["ingresses"]
-  verbs: ["get", "list", "watch", "create", "patch", "update"]
+  verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
