@@ -12,3 +12,7 @@ output "plan_role_arn" {
   description = "PR의 terraform plan이 맡을 읽기 전용 역할 ARN (GitHub Variables AWS_PLAN_ROLE_ARN에 등록)"
   value       = module.identity.plan_role_arn
 }
+output "app_role_arn" {
+  description = "앱 파드용 Bedrock 역할 ARN"
+  value       = module.identity.app_role_arn
+}
