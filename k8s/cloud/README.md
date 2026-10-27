@@ -1,5 +1,8 @@
 # AWS 앱 배포 (M4-5)
 
+> M5-7부터 배포는 Helm 차트(`charts/newsbrief`, `values-aws.yaml`)로 한다. 아래 표의 매니페스트는 전환 확인 후 정리할 예정이다.
+> GitHub Variables와 runner 설치 방법은 그대로다. 처음 한 번 `bash k8s/cloud/helm-adopt.sh`로 기존 리소스를 Helm으로 넘긴다.
+
 백엔드 main 머지 → 백엔드 CI가 이미지 push 후 `deploy-aws` 호출 → AWS control plane의 runner가 배포한다.
 온프렘(`deploy-onprem`)과 같은 구조이고, 차이는 실행 위치(runner 라벨 `aws`)와 환경 설정 파일(`k8s/cloud/`)뿐이다.
 API 서버를 인터넷에 열지 않고 AWS 액세스 키도 쓰지 않는다 (runner가 VPC 안에서 kubectl 실행).
