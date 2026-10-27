@@ -1,7 +1,7 @@
 # 온프렘(develop) 배포 — GitOps (Argo CD, M5)
 # - 앱 CI가 이미지 push 후 repository_dispatch(deploy-onprem)로 호출: client_payload {app, sha}
 # - 수동 재배포·롤백: Actions 탭 → deploy-onprem → Run workflow (app, sha 입력)
-# 이 workflow는 클러스터를 직접 바꾸지 않는다. deploy/onprem 브랜치의 태그 파일만 커밋하고,
+# 이 workflow는 클러스터를 직접 바꾸지 않는다. deploy/onprem 브랜치에 develop을 합치고 태그 파일을 커밋하면,
 # 클러스터 안의 Argo CD가 그 커밋을 보고 배포한다. 끝나면 실제 실행 버전을 확인한다
 # self-hosted runner에서 실행되므로 pull_request 트리거는 절대 추가하지 않는다
 name: deploy-onprem
@@ -49,9 +49,14 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: deploy/onprem
+          fetch-depth: 0
 
       - name: 태그 커밋 (deploy/onprem)
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # deploy/onprem = develop + 태그 파일. 최신 차트로 배포하도록 develop을 먼저 합친다
+          git merge -q --no-edit origin/develop
           tag_of() { sed -n "/^$1:/,/tag:/s/^ *tag: *//p" "$TAGS" | tr -d '"'; }
           B="$(tag_of backend)"; F="$(tag_of frontend)"
           if [ "$APP" = backend ]; then B="$SHA"; else F="$SHA"; fi
@@ -66,16 +71,15 @@ jobs:
             image:
               tag: "$F"
           TAGS_EOF
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$TAGS"
           if git diff --cached --quiet; then
             echo "태그 변화 없음 (같은 버전 재배포)" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             git commit -q -m "deploy(onprem): $APP $SHA"
-            git push -q origin HEAD:deploy/onprem
             echo "태그 커밋: $(git rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+          # develop 합친 것만 있어도 올린다 (없으면 그대로)
+          git push -q origin HEAD:deploy/onprem
 
       - name: Argo CD 반영 대기
         run: |

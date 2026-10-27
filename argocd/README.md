@@ -4,23 +4,28 @@ Git에 적힌 상태를 클러스터에 맞추는 도구. 클러스터 안에서
 
 ## 구조 (온프렘)
 
-| 무엇 | 어디 | 누가 바꾸나 |
+| 브랜치 | 내용 | 누가 바꾸나 |
 |---|---|---|
-| 앱 차트, values-onprem.yaml | develop 브랜치 `charts/newsbrief` | PR (보호 규칙) |
-| 이미지 태그 | deploy/onprem 브랜치 `deploy/tags-onprem.yaml` | deploy-onprem workflow가 자동 커밋 |
-| 둘을 합쳐 배포 | Argo CD Application `newsbrief-onprem` (`argocd/newsbrief-onprem.yaml`) | Argo CD |
+| develop | 앱 차트 `charts/newsbrief`, `values-onprem.yaml` | PR (보호 규칙) |
+| deploy/onprem | develop 내용 + 이미지 태그 `deploy/tags-onprem.yaml` | workflow만 (사람이 직접 커밋하지 않음) |
 
-develop은 보호 규칙이 있어 workflow가 직접 커밋할 수 없다. 그래서 태그만 별도 브랜치에 둔다.
+Argo CD Application `newsbrief-onprem`(`argocd/newsbrief-onprem.yaml`)은 **deploy/onprem 하나만** 읽는다.
+
+- develop은 보호 규칙이 있어 workflow가 직접 커밋할 수 없다 → 태그는 다른 브랜치에 둔다
+- Argo CD는 한 앱에서 같은 저장소의 다른 브랜치를 같이 읽지 못한다 → deploy/onprem에 develop을 합쳐 한 브랜치로 만든다
 
 배포 흐름
 
 ```
 앱 머지 → 앱 CI가 이미지 push → deploy-onprem 호출
-→ workflow가 deploy/onprem의 태그 파일 커밋 → Argo CD 새로고침 요청
+→ workflow가 deploy/onprem에 develop을 합치고 태그 파일 커밋 → Argo CD 새로고침 요청
 → Argo CD가 반영 → workflow가 롤아웃·실행 버전(SHA) 확인
+
+infra develop 머지(차트·values 변경) → sync-deploy-onprem이 deploy/onprem에 합침 → Argo CD가 3분 안에 반영
 ```
 
 workflow는 클러스터를 직접 바꾸지 않는다 (kubectl은 확인·새로고침 요청에만 사용).
+deploy/onprem은 PR로 develop에 합치지 않는다 (GitHub의 "Compare & pull request" 안내는 무시).
 
 ## 설치 (1회, k8s-cp 관리자)
 
