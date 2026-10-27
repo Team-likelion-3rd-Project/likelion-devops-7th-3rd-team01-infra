@@ -12,6 +12,15 @@ configs:
   params:
     # TLS는 Tailscale 구간이라 서버에서 끈다 (Grafana와 같은 방식)
     server.insecure: true
+  cm:
+    # 온프렘 Traefik은 NodePort라 Ingress에 로드밸런서 주소가 채워지지 않는다.
+    # 기본 규칙이면 Ingress가 계속 Progressing으로 보여 앱 전체가 Healthy가 되지 않으므로, 주소가 없어도 정상으로 본다.
+    # Ingress가 실제로 동작하는지는 사이트 접속과 Traefik 지표(Grafana)로 확인한다
+    resource.customizations.health.networking.k8s.io_Ingress: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = "온프렘 NodePort Ingress (주소 없음은 정상)"
+      return hs
 
 server:
   service:
