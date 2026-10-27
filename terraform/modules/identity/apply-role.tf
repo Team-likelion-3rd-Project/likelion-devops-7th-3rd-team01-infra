@@ -7,6 +7,12 @@ variable "apply_environment_name" {
   default     = "aws-apply"
 }
 
+variable "project_tag_value" {
+  description = "우리 리소스에 붙는 Project 태그 값 (default_tags와 같아야 함)"
+  type        = string
+  default     = "likelion-team01"
+}
+
 locals {
   apply_iam_prefix = "arn:aws:iam::${data.aws_caller_identity.current.account_id}"
   apply_regions    = distinct([data.aws_region.current.region, "us-east-1"])
@@ -189,6 +195,65 @@ data "aws_iam_policy_document" "apply" {
       "${local.apply_iam_prefix}:role/team01-infra-plan-*",
       "${local.apply_iam_prefix}:role/team01-frontend-deploy-*",
     ]
+  }
+
+  # 우리 태그(Project)가 없는 리소스는 삭제·수정·중지하지 못한다 (같은 계정의 다른 팀 보호).
+  # Create 계열은 대상이 아직 없어 태그가 없으므로 막지 않는다.
+  statement {
+    sid    = "ProtectOtherTeamResources"
+    effect = "Deny"
+    actions = [
+      "ec2:Delete*", "ec2:Modify*", "ec2:Terminate*", "ec2:Stop*", "ec2:Reboot*",
+      "ec2:Attach*", "ec2:Detach*", "ec2:Associate*", "ec2:Disassociate*",
+      "ec2:Release*", "ec2:Revoke*", "ec2:Authorize*", "ec2:Replace*", "ec2:CreateRoute",
+      "rds:Delete*", "rds:Modify*", "rds:Stop*", "rds:Reboot*", "rds:Failover*", "rds:Promote*",
+      "elasticache:Delete*", "elasticache:Modify*", "elasticache:Reboot*",
+      "elasticache:IncreaseReplicaCount", "elasticache:DecreaseReplicaCount", "elasticache:TestFailover",
+      "elasticloadbalancing:Delete*", "elasticloadbalancing:Modify*", "elasticloadbalancing:Set*",
+      "elasticloadbalancing:Register*", "elasticloadbalancing:Deregister*",
+      "acm:Delete*", "acm:Update*", "acm:Renew*",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_tag_value]
+    }
+  }
+
+  # CloudFront는 태그를 달 수 있는 distribution만 대상으로 한다 (OAC·정책은 태그가 없음).
+  statement {
+    sid    = "ProtectOtherTeamDistributions"
+    effect = "Deny"
+    actions = [
+      "cloudfront:Delete*", "cloudfront:Update*",
+      "cloudfront:Associate*", "cloudfront:Disassociate*",
+    ]
+    resources = ["arn:aws:cloudfront::${data.aws_caller_identity.current.account_id}:distribution/*"]
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_tag_value]
+    }
+  }
+
+  # 이미 있는 EC2 리소스에 태그만 붙여 우리 것으로 위장하지 못하게 한다.
+  # 리소스를 만들면서 붙이는 태그(ec2:CreateAction 있음)는 허용한다.
+  statement {
+    sid       = "ProtectOtherTeamEc2Tags"
+    effect    = "Deny"
+    actions   = ["ec2:CreateTags"]
+    resources = ["*"]
+    condition {
+      test     = "Null"
+      variable = "ec2:CreateAction"
+      values   = ["true"]
+    }
+    condition {
+      test     = "StringNotEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_tag_value]
+    }
   }
 }
 

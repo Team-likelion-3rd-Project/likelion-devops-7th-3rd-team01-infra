@@ -113,4 +113,32 @@ run "apply_role_contract" {
     ]) == 1
     error_message = "OIDC로 맡는 역할 3개를 보호하는 Deny가 있어야 한다"
   }
+
+
+  # 우리 태그가 없는 리소스는 삭제·수정·중지할 수 없다
+  assert {
+    condition = length([
+      for s in data.aws_iam_policy_document.apply.statement : s
+      if s.sid == "ProtectOtherTeamResources" && s.effect == "Deny"
+      && contains(s.actions, "ec2:Delete*") && contains(s.actions, "rds:Delete*")
+      && contains(s.actions, "elasticache:Delete*") && contains(s.actions, "elasticloadbalancing:Delete*")
+      && contains(s.actions, "acm:Delete*")
+      && length([
+        for c in s.condition : c
+        if c.variable == "aws:ResourceTag/Project" && c.test == "StringNotEquals"
+      ]) == 1
+    ]) == 1
+    error_message = "태그가 없는 리소스에 대한 삭제·수정·중지 Deny가 있어야 한다"
+  }
+
+  # CloudFront도 distribution에 한해 같은 보호가 있다
+  assert {
+    condition = length([
+      for s in data.aws_iam_policy_document.apply.statement : s
+      if s.sid == "ProtectOtherTeamDistributions" && s.effect == "Deny"
+      && alltrue([for r in s.resources : strcontains(r, ":distribution/")])
+    ]) == 1
+    error_message = "다른 팀 CloudFront distribution 보호 Deny가 있어야 한다"
+  }
 }
+
