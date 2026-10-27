@@ -1,6 +1,6 @@
 # newsbrief Helm 차트 (M5-6)
 
-`k8s/base` + `k8s/onprem` + `k8s/cloud` 매니페스트를 차트 하나로 옮긴 것이다.
+온프렘·AWS 앱 배포에 쓰는 Helm 차트. 원래 `k8s/base` + `k8s/onprem` + `k8s/cloud` 매니페스트였고, M5-6에서 차트로 옮겼다 (M5-7 전환 후 옛 매니페스트는 삭제).
 렌더링 결과는 기존 매니페스트와 같고, Helm 관리 라벨만 추가된다 (selector·파드 라벨은 그대로라 전환만으로 재시작되지 않음).
 
 온프렘(deploy-onprem)과 AWS(deploy-aws) 배포 모두 M5-7부터 이 차트로 한다.
@@ -79,5 +79,4 @@ helm get values newsbrief -n news
 
 ## 남은 일
 
-1. 두 환경 Helm 전환 확인 후 `k8s/base`, `k8s/onprem/backend-config.yaml`, `k8s/onprem/ingress.yaml`, `k8s/cloud/*.yaml` 정리
-2. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
+1. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
