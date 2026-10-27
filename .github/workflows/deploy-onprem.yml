@@ -1,6 +1,7 @@
-# 온프렘(develop) 배포
+# 온프렘(develop) 배포 — Helm 차트 charts/newsbrief + values-onprem.yaml (M5-7)
 # - 앱 CI가 이미지 push 후 repository_dispatch(deploy-onprem)로 호출: client_payload {app, sha}
 # - 수동 재배포·롤백: Actions 탭 → deploy-onprem → Run workflow (app, sha 입력)
+# - 한 앱만 배포할 때 다른 앱의 이미지 태그는 클러스터에서 지금 값을 읽어 그대로 넘긴다
 # self-hosted runner에서 실행되므로 pull_request 트리거는 절대 추가하지 않는다
 name: deploy-onprem
 
@@ -21,8 +22,10 @@ on:
 permissions:
   contents: read
 
+# Helm 릴리스 하나(newsbrief)를 백엔드·프론트가 같이 쓰므로 배포를 한 줄로 세운다
+# (동시에 돌면 "another operation is in progress"로 실패)
 concurrency:
-  group: deploy-onprem-${{ github.event.client_payload.app || inputs.app }}
+  group: deploy-onprem
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +37,10 @@ jobs:
       APP: ${{ github.event.client_payload.app || inputs.app }}
       SHA: ${{ github.event.client_payload.sha || inputs.sha }}
       NS: news
+      RELEASE: newsbrief
+      CHART: charts/newsbrief
+      # 릴리스 기록을 ConfigMap에 저장 (배포 SA에 Secret 권한을 주지 않기 위해)
+      HELM_DRIVER: configmap
     steps:
       - uses: actions/checkout@v5
 
@@ -43,12 +50,19 @@ jobs:
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha는 40자리 소문자 16진수: '$SHA'"; exit 1; }
           echo "배포: $APP @ $SHA" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: 매니페스트 적용
+      - name: Helm 배포
         run: |
-          # 환경별 설정은 base에서 분리되어 있다 (온프렘: k8s/onprem/backend-config.yaml)
-          if [ "$APP" = backend ]; then kubectl apply -f k8s/onprem/backend-config.yaml; fi
-          sed "s/IMAGE_TAG/$SHA/" "k8s/base/$APP.yaml" > "$RUNNER_TEMP/$APP.yaml"
-          kubectl apply -f "$RUNNER_TEMP/$APP.yaml"
+          # 배포하지 않는 앱은 지금 실행 중인 태그를 유지한다
+          cur() { kubectl get "deployment/$1" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://'; }
+          if [ "$APP" = backend ]; then B="$SHA"; F="$(cur frontend)"; else B="$(cur api)"; F="$SHA"; fi
+          [[ "$B" =~ ^[0-9a-f]{40}$ && "$F" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::현재 이미지 태그를 읽지 못함 (backend '$B', frontend '$F')"; exit 1; }
+          echo "backend $B / frontend $F" | tee -a "$GITHUB_STEP_SUMMARY"
+          helm upgrade --install "$RELEASE" "$CHART" -n "$NS" \
+            -f "$CHART/values-onprem.yaml" \
+            --set-string backend.image.tag="$B" \
+            --set-string frontend.image.tag="$F" \
+            --history-max 10
+          helm history "$RELEASE" -n "$NS" --max 3 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 롤아웃 완료 대기
         run: |
@@ -70,5 +84,6 @@ jobs:
       - name: 실패 시 상태 기록
         if: failure()
         run: |
+          helm status "$RELEASE" -n "$NS" || true
           kubectl get pods -n "$NS" -o wide || true
           kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20 || true

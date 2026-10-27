@@ -1,13 +1,15 @@
-# 프론트엔드 (React 빌드 결과를 Nginx로 서빙)
-# IMAGE_TAG: 커밋 SHA로 교체 후 적용 (latest 금지)
+{{- if .Values.frontend.enabled }}
+# 프론트엔드 (React 빌드 결과를 Nginx로 서빙). AWS는 S3·CloudFront라 만들지 않는다
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: news
-  labels: {app: frontend}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend
+    {{- include "newsbrief.labels" . | nindent 4 }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.frontend.replicas }}
   strategy:
     type: RollingUpdate
     rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
@@ -19,7 +21,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-frontend:IMAGE_TAG
+        image: {{ .Values.frontend.image.repository }}:{{ include "newsbrief.tag" (dict "name" "frontend" "tag" .Values.frontend.image.tag) }}
         ports:
         - containerPort: 80
         readinessProbe:
@@ -36,9 +38,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend
-  namespace: news
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
 spec:
   selector: {app: frontend}
   ports:
   - port: 80
     targetPort: 80
+{{- end }}

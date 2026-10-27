@@ -1,4 +1,5 @@
-# AWS(main) 배포 — 백엔드만. 프론트는 frontend 저장소 workflow가 S3·CloudFront로 배포한다
+# AWS(main) 배포 — 백엔드만, Helm 차트 charts/newsbrief + values-aws.yaml (M5-7)
+# 프론트는 frontend 저장소 workflow가 S3·CloudFront로 배포한다
 # - 백엔드 CI가 main에서 이미지 push 후 repository_dispatch(deploy-aws)로 호출: client_payload {app: backend, sha}
 # - 수동 재배포·롤백·AI 모드 변경 반영: Actions 탭 → deploy-aws → Run workflow (sha 입력)
 # AWS control plane의 self-hosted runner(라벨 aws)에서 실행. pull_request 트리거는 절대 추가하지 않는다
@@ -38,6 +39,10 @@ jobs:
       REDIS_HOST: ${{ vars.AWS_REDIS_HOST }}
       APP_ORIGIN: ${{ vars.AWS_APP_ORIGIN }}
       AI_MODE: ${{ vars.AWS_AI_MODE || 'mock' }}
+      RELEASE: newsbrief
+      CHART: charts/newsbrief
+      # 릴리스 기록을 ConfigMap에 저장 (배포 SA에 Secret 권한을 주지 않기 위해, 온프렘과 같음)
+      HELM_DRIVER: configmap
     steps:
       - uses: actions/checkout@v5
 
@@ -50,32 +55,29 @@ jobs:
           case "$AI_MODE" in mock|bedrock) ;; *) echo "::error::AWS_AI_MODE는 mock 또는 bedrock: '$AI_MODE'"; exit 1;; esac
           echo "배포: backend @ $SHA (AI_MODE=$AI_MODE)" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: AWS 설정 적용
+      - name: Helm 배포
         run: |
-          r="$RUNNER_TEMP/cloud"; mkdir -p "$r"
-          for f in backend-config data-services ingress; do
-            sed -e "s|\${DB_HOST}|$DB_HOST|g" -e "s|\${REDIS_HOST}|$REDIS_HOST|g" \
-                -e "s|\${APP_ORIGIN}|$APP_ORIGIN|g" -e "s|\${AI_MODE}|$AI_MODE|g" \
-                "k8s/cloud/$f.yaml" > "$r/$f.yaml"
-          done
-          kubectl apply -f "$r/data-services.yaml" -f "$r/ingress.yaml"
-          # 설정이 바뀌었으면 이미지가 같아도 파드를 다시 띄워야 반영된다 (환경 변수는 시작할 때 읽음)
-          if kubectl diff -f "$r/backend-config.yaml" >/dev/null 2>&1; then
-            echo "CONFIG_CHANGED=false" >> "$GITHUB_ENV"
-          else
-            echo "CONFIG_CHANGED=true" >> "$GITHUB_ENV"
-          fi
-          kubectl apply -f "$r/backend-config.yaml"
-
-      - name: 매니페스트 적용
-        run: |
+          # 접속 주소·화면 주소·AI 모드는 저장소가 아니라 GitHub Variables에서 넘긴다
+          args=(-n "$NS" -f "$CHART/values-aws.yaml"
+            --set-string backend.image.tag="$SHA"
+            --set-string mysql.externalHost="$DB_HOST"
+            --set-string redis.externalHost="$REDIS_HOST"
+            --set-string backend.config.CORS_ALLOWED_ORIGINS="$APP_ORIGIN"
+            --set-string backend.config.AI_MODE="$AI_MODE")
           before="$(kubectl get deployment/api -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
-          sed "s/IMAGE_TAG/$SHA/" k8s/base/backend.yaml > "$RUNNER_TEMP/backend.yaml"
-          kubectl apply -f "$RUNNER_TEMP/backend.yaml"
-          if [ "$CONFIG_CHANGED" = true ] && [ "${before##*:}" = "$SHA" ]; then
-            echo "같은 이미지, 설정만 변경 → 재시작"
+          # 설정(ConfigMap)이 바뀌는지 미리 확인. 환경 변수는 파드가 시작할 때만 읽으므로
+          # 이미지가 같고 설정만 바뀌면(AI 모드 전환 등) 재시작해야 반영된다
+          # 값(data)만 비교한다. kubectl diff는 Helm 전환 뒤 라벨·이전 apply 기록 차이 때문에 값이 같아도 "바뀜"으로 나온다
+          helm template "$RELEASE" "$CHART" "${args[@]}" --show-only templates/backend-config.yaml > "$RUNNER_TEMP/backend-config.yaml"
+          want="$(kubectl create --dry-run=client -f "$RUNNER_TEMP/backend-config.yaml" -o jsonpath='{.data}')"
+          have="$(kubectl get configmap/backend-config -n "$NS" -o jsonpath='{.data}' 2>/dev/null || true)"
+          if [ "$want" = "$have" ]; then config_changed=false; else config_changed=true; fi
+          helm upgrade --install "$RELEASE" "$CHART" "${args[@]}" --history-max 10
+          if [ "$config_changed" = true ] && [ "${before##*:}" = "$SHA" ]; then
+            echo "같은 이미지, 설정만 변경 → 재시작" | tee -a "$GITHUB_STEP_SUMMARY"
             kubectl rollout restart deployment/api deployment/worker -n "$NS"
           fi
+          helm history "$RELEASE" -n "$NS" --max 3 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 롤아웃 완료 대기
         run: |
@@ -92,5 +94,6 @@ jobs:
       - name: 실패 시 상태 기록
         if: failure()
         run: |
+          helm status "$RELEASE" -n "$NS" || true
           kubectl get pods -n "$NS" -o wide || true
           kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20 || true

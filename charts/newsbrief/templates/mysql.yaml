@@ -1,8 +1,12 @@
+{{- if .Values.mysql.inCluster }}
+# 온프렘: 클러스터 안 MySQL
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: mysql-config
-  namespace: news
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
 data:
   custom.cnf: |
     [mysqld]
@@ -15,8 +19,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mysql
-  namespace: news
-  labels: {app: mysql}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: mysql
+    {{- include "newsbrief.labels" . | nindent 4 }}
 spec:
   clusterIP: None
   selector: {app: mysql}
@@ -24,11 +30,14 @@ spec:
   - name: mysql
     port: 3306
 ---
+# selector·serviceName·volumeClaimTemplates는 만든 뒤 바꿀 수 없다. 기존 매니페스트와 똑같이 유지할 것
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: mysql
-  namespace: news
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
 spec:
   serviceName: mysql
   replicas: 1
@@ -40,7 +49,7 @@ spec:
     spec:
       containers:
       - name: mysql
-        image: mysql:8.4
+        image: {{ .Values.mysql.image }}
         ports:
         - containerPort: 3306
         env:
@@ -74,4 +83,20 @@ spec:
     spec:
       accessModes: [ReadWriteOnce]
       resources:
-        requests: {storage: 10Gi}
+        requests: {storage: {{ .Values.mysql.storage }}}
+{{- else }}
+# AWS: RDS를 클러스터 안 이름(mysql)으로 연결. 앱 설정은 온프렘과 같다
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  type: ExternalName
+  externalName: {{ required "mysql.externalHost (RDS 주소)가 필요합니다" .Values.mysql.externalHost | quote }}
+  ports:
+  - name: mysql
+    port: 3306
+{{- end }}

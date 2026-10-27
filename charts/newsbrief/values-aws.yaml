@@ -1,0 +1,28 @@
+# AWS (main): RDS·ElastiCache·Bedrock. 화면은 S3·CloudFront라 frontend 끔
+# 빈 값("")은 배포할 때 GitHub Variables로 채운다. 접속 주소를 공개 저장소에 두지 않기 위해서다
+#   --set mysql.externalHost=$DB_HOST --set redis.externalHost=$REDIS_HOST
+#   --set-string backend.config.CORS_ALLOWED_ORIGINS=$APP_ORIGIN --set-string backend.config.AI_MODE=$AI_MODE
+backend:
+  config:
+    # HTTPS(ALB·CloudFront)라 로그인 쿠키를 Secure로
+    COOKIE_SECURE: "true"
+    # 화면 주소(https://app.<도메인>)
+    CORS_ALLOWED_ORIGINS: ""
+    # mock | bedrock. bedrock은 노드 IAM 역할로 호출 (액세스 키 없음)
+    AI_MODE: ""
+
+frontend:
+  enabled: false
+
+mysql:
+  inCluster: false
+  externalHost: ""
+
+redis:
+  inCluster: false
+  externalHost: ""
+
+ingress:
+  name: news-api
+  className: traefik
+  frontend: false

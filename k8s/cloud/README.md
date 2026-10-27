@@ -1,16 +1,11 @@
-# AWS 앱 배포 (M4-5)
+# AWS 앱 배포
 
-백엔드 main 머지 → 백엔드 CI가 이미지 push 후 `deploy-aws` 호출 → AWS control plane의 runner가 배포한다.
-온프렘(`deploy-onprem`)과 같은 구조이고, 차이는 실행 위치(runner 라벨 `aws`)와 환경 설정 파일(`k8s/cloud/`)뿐이다.
-API 서버를 인터넷에 열지 않고 AWS 액세스 키도 쓰지 않는다 (runner가 VPC 안에서 kubectl 실행).
+백엔드 main 머지 → 백엔드 CI가 이미지 push 후 `deploy-aws` 호출 → AWS control plane의 runner가 Helm 차트로 배포한다.
+차트는 `charts/newsbrief`, AWS 값은 `values-aws.yaml`이다. 온프렘(`deploy-onprem`)과 같은 차트를 쓰고 values 파일만 다르다.
+API 서버를 인터넷에 열지 않고 AWS 액세스 키도 쓰지 않는다 (runner가 VPC 안에서 helm·kubectl 실행).
 
-| 파일 | 내용 |
-|---|---|
-| `backend-config.yaml` | AWS 설정: 쿠키 Secure, CORS 허용 화면 주소, AI_MODE |
-| `data-services.yaml` | RDS·Redis를 `mysql`·`redis` 이름으로 연결 (ExternalName) |
-| `ingress.yaml` | ALB → Traefik → `/api`만 api로 |
-
-`${...}` 자리는 workflow가 GitHub Variables 값으로 채운다. 접속 주소를 저장소에 두지 않기 위해서다.
+DB·Redis 주소, 화면 주소, AI 모드는 저장소에 두지 않고 GitHub Variables 값을 배포할 때 `--set-string`으로 넘긴다.
+`helm-adopt.sh`는 kubectl로 만든 기존 리소스를 Helm으로 넘길 때 한 번 쓴 스크립트다 (M5-7, 완료).
 
 ## GitHub Variables (infra 저장소)
 
