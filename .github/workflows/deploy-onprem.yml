@@ -1,7 +1,8 @@
-# 온프렘(develop) 배포 — Helm 차트 charts/newsbrief + values-onprem.yaml (M5-7)
+# 온프렘(develop) 배포 — GitOps (Argo CD, M5)
 # - 앱 CI가 이미지 push 후 repository_dispatch(deploy-onprem)로 호출: client_payload {app, sha}
 # - 수동 재배포·롤백: Actions 탭 → deploy-onprem → Run workflow (app, sha 입력)
-# - 한 앱만 배포할 때 다른 앱의 이미지 태그는 클러스터에서 지금 값을 읽어 그대로 넘긴다
+# 이 workflow는 클러스터를 직접 바꾸지 않는다. deploy/onprem 브랜치의 태그 파일만 커밋하고,
+# 클러스터 안의 Argo CD가 그 커밋을 보고 배포한다. 끝나면 실제 실행 버전을 확인한다
 # self-hosted runner에서 실행되므로 pull_request 트리거는 절대 추가하지 않는다
 name: deploy-onprem
 
@@ -19,11 +20,11 @@ on:
         description: 배포할 전체 커밋 SHA (40자리)
         required: true
 
+# deploy/onprem 브랜치에 태그 커밋을 올리기 위해 쓰기 권한 필요 (develop·main은 보호 규칙으로 막혀 있음)
 permissions:
-  contents: read
+  contents: write
 
-# Helm 릴리스 하나(newsbrief)를 백엔드·프론트가 같이 쓰므로 배포를 한 줄로 세운다
-# (동시에 돌면 "another operation is in progress"로 실패)
+# 태그 파일 하나를 백엔드·프론트가 같이 고치므로 한 줄로 세운다
 concurrency:
   group: deploy-onprem
   cancel-in-progress: false
@@ -31,38 +32,66 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, onprem]
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       # 입력값은 env로만 넘기고 run 안에 ${{ }}로 직접 넣지 않는다 (명령 주입 방지)
       APP: ${{ github.event.client_payload.app || inputs.app }}
       SHA: ${{ github.event.client_payload.sha || inputs.sha }}
       NS: news
-      RELEASE: newsbrief
-      CHART: charts/newsbrief
-      # 릴리스 기록을 ConfigMap에 저장 (배포 SA에 Secret 권한을 주지 않기 위해)
-      HELM_DRIVER: configmap
+      TAGS: deploy/tags-onprem.yaml
     steps:
-      - uses: actions/checkout@v5
-
       - name: 입력값 검증
         run: |
           case "$APP" in backend|frontend) ;; *) echo "::error::app은 backend 또는 frontend: '$APP'"; exit 1;; esac
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha는 40자리 소문자 16진수: '$SHA'"; exit 1; }
           echo "배포: $APP @ $SHA" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Helm 배포
+      - uses: actions/checkout@v5
+        with:
+          ref: deploy/onprem
+
+      - name: 태그 커밋 (deploy/onprem)
         run: |
-          # 배포하지 않는 앱은 지금 실행 중인 태그를 유지한다
-          cur() { kubectl get "deployment/$1" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://'; }
-          if [ "$APP" = backend ]; then B="$SHA"; F="$(cur frontend)"; else B="$(cur api)"; F="$SHA"; fi
-          [[ "$B" =~ ^[0-9a-f]{40}$ && "$F" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::현재 이미지 태그를 읽지 못함 (backend '$B', frontend '$F')"; exit 1; }
-          echo "backend $B / frontend $F" | tee -a "$GITHUB_STEP_SUMMARY"
-          helm upgrade --install "$RELEASE" "$CHART" -n "$NS" \
-            -f "$CHART/values-onprem.yaml" \
-            --set-string backend.image.tag="$B" \
-            --set-string frontend.image.tag="$F" \
-            --history-max 10
-          helm history "$RELEASE" -n "$NS" --max 3 | tee -a "$GITHUB_STEP_SUMMARY"
+          tag_of() { sed -n "/^$1:/,/tag:/s/^ *tag: *//p" "$TAGS" | tr -d '"'; }
+          B="$(tag_of backend)"; F="$(tag_of frontend)"
+          if [ "$APP" = backend ]; then B="$SHA"; else F="$SHA"; fi
+          [[ "$B" =~ ^[0-9a-f]{40}$ && "$F" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::태그 파일을 읽지 못함 (backend '$B', frontend '$F')"; exit 1; }
+          cat > "$TAGS" <<TAGS_EOF
+          # deploy-onprem workflow가 갱신한다. Argo CD가 이 파일의 태그로 온프렘에 배포한다
+          # 롤백: deploy-onprem을 이전 SHA로 수동 실행 (또는 이 파일의 이전 커밋으로 되돌리기)
+          backend:
+            image:
+              tag: "$B"
+          frontend:
+            image:
+              tag: "$F"
+          TAGS_EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$TAGS"
+          if git diff --cached --quiet; then
+            echo "태그 변화 없음 (같은 버전 재배포)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            git commit -q -m "deploy(onprem): $APP $SHA"
+            git push -q origin HEAD:deploy/onprem
+            echo "태그 커밋: $(git rev-parse --short HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Argo CD 반영 대기
+        run: |
+          # Argo CD는 3분마다 Git을 확인한다. 바로 다시 읽도록 요청하고 새 이미지가 적용될 때까지 기다린다
+          kubectl annotate application/newsbrief-onprem -n argocd argocd.argoproj.io/refresh=normal --overwrite
+          if [ "$APP" = backend ]; then deploys="api worker"; else deploys="frontend"; fi
+          for i in $(seq 1 60); do
+            ok=true
+            for d in $deploys; do
+              img="$(kubectl get "deployment/$d" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+              [ "${img##*:}" = "$SHA" ] || ok=false
+            done
+            $ok && { echo "Argo CD 반영 확인 (${i}회째)"; break; }
+            [ "$i" = 60 ] && { echo "::error::10분 안에 Argo CD가 반영하지 않음"; exit 1; }
+            sleep 10
+          done
 
       - name: 롤아웃 완료 대기
         run: |
@@ -84,6 +113,6 @@ jobs:
       - name: 실패 시 상태 기록
         if: failure()
         run: |
-          helm status "$RELEASE" -n "$NS" || true
+          kubectl get application/newsbrief-onprem -n argocd -o jsonpath='{.status.sync.status} {.status.health.status} {.status.operationState.message}{"\n"}' || true
           kubectl get pods -n "$NS" -o wide || true
           kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20 || true

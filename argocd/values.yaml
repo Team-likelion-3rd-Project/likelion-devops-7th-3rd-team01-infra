@@ -1,0 +1,42 @@
+# Argo CD 설치 값 (온프렘, helm chart argo/argo-cd)
+# 쓰지 않는 기능은 끄고 자원을 작게 잡는다 (cp 메모리 여유가 적음. cp는 taint가 있어 워커에 뜬다)
+# 화면: http://<노드 Tailscale IP>:30880 (Tailscale 안에서만 접속, 주소는 팀 채팅으로만 공유)
+
+# 외부 로그인(SSO)·알림은 쓰지 않는다
+dex:
+  enabled: false
+notifications:
+  enabled: false
+
+configs:
+  params:
+    # TLS는 Tailscale 구간이라 서버에서 끈다 (Grafana와 같은 방식)
+    server.insecure: true
+
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30880
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+controller:
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 768Mi}
+
+repoServer:
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 512Mi}
+
+applicationSet:
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits: {memory: 128Mi}
+
+redis:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 128Mi}

@@ -51,9 +51,12 @@ helm template newsbrief charts/newsbrief -n news -f charts/newsbrief/values-onpr
 
 차이가 Helm 라벨(`app.kubernetes.io/*`, `helm.sh/chart`) 추가뿐이면 정상이다.
 
-## 온프렘 Helm 배포 (M5-7)
+## 온프렘 Helm 배포 (M5-7) → Argo CD로 전환
 
-- workflow: `.github/workflows/deploy-onprem.yml`이 `helm upgrade --install newsbrief charts/newsbrief -f values-onprem.yaml`로 배포한다
+> 온프렘은 이제 Argo CD가 이 차트로 배포한다 (`argocd/README.md`). 이미지 태그는 deploy/onprem 브랜치의 `deploy/tags-onprem.yaml`에 있다.
+> 아래는 Helm으로 직접 배포하던 때의 기록이다.
+
+- workflow: `.github/workflows/deploy-onprem.yml`이 `helm upgrade --install newsbrief charts/newsbrief -f values-onprem.yaml`로 배포했다
 - 한 앱만 배포할 때 다른 앱의 태그는 클러스터에서 지금 값을 읽어 그대로 넘긴다
 - 릴리스 기록은 ConfigMap에 저장한다 (`HELM_DRIVER=configmap`). 배포 SA에 Secret 권한을 주지 않기 위해서다. 관리자가 helm 명령을 쓸 때도 같은 값을 줘야 같은 릴리스로 보인다
 - 백엔드·프론트 배포가 같은 릴리스를 쓰므로 workflow 동시 실행을 한 줄로 세웠다 (concurrency `deploy-onprem`)
@@ -79,4 +82,4 @@ helm get values newsbrief -n news
 
 ## 남은 일
 
-1. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
+1. GitOps(Argo CD): 온프렘은 적용 (`argocd/`), AWS는 EKS 전환 때 같은 방식으로 적용

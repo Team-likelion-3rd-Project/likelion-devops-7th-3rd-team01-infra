@@ -1,0 +1,32 @@
+# 온프렘 앱 (Argo CD Application)
+# 차트는 develop 브랜치(PR로만 바뀜), 이미지 태그는 deploy/onprem 브랜치(deploy-onprem workflow가 커밋)에서 읽는다
+# develop은 보호 규칙이 있어 workflow가 직접 커밋할 수 없으므로 태그만 따로 둔다
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: newsbrief-onprem
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: news
+  sources:
+  - repoURL: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra.git
+    targetRevision: develop
+    path: charts/newsbrief
+    helm:
+      # Helm으로 배포하던 릴리스 이름과 같게 둔다 (렌더링 결과·라벨이 그대로라 넘겨받을 때 파드가 재시작되지 않음)
+      releaseName: newsbrief
+      valueFiles:
+      - values-onprem.yaml
+      - $tags/deploy/tags-onprem.yaml
+  - repoURL: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra.git
+    targetRevision: deploy/onprem
+    ref: tags
+  syncPolicy:
+    automated:
+      # 차트에서 빠진 리소스는 지운다
+      prune: true
+      # kubectl로 바꾼 상태를 Git 기준으로 되돌린다. 장애 시험 중에는 끈다 (argocd/README.md)
+      selfHeal: true
