@@ -1,0 +1,38 @@
+# develop에 머지되면 deploy/onprem 브랜치에 합친다 (차트·values 변경을 온프렘 Argo CD가 반영하도록)
+# deploy/onprem = develop + 이미지 태그 파일. 클러스터에는 접근하지 않는다 (GitHub 호스팅 러너)
+name: sync-deploy-onprem
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 태그 커밋(deploy-onprem)과 겹치지 않게 같은 줄에 세운다
+concurrency:
+  group: deploy-onprem
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: deploy/onprem
+          fetch-depth: 0
+      - name: develop 합치기
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          before="$(git rev-parse HEAD)"
+          git merge -q --no-edit origin/develop
+          if [ "$(git rev-parse HEAD)" = "$before" ]; then
+            echo "합칠 변경 없음" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            git push -q origin HEAD:deploy/onprem
+            echo "deploy/onprem ← develop $(git rev-parse --short origin/develop) (Argo CD가 3분 안에 반영)" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
