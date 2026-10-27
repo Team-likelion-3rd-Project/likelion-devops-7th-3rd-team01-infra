@@ -3,7 +3,7 @@
 `k8s/base` + `k8s/onprem` + `k8s/cloud` 매니페스트를 차트 하나로 옮긴 것이다.
 렌더링 결과는 기존 매니페스트와 같고, Helm 관리 라벨만 추가된다 (selector·파드 라벨은 그대로라 전환만으로 재시작되지 않음).
 
-온프렘 배포(deploy-onprem)는 M5-7부터 이 차트로 한다. AWS 배포(deploy-aws)는 아직 `k8s/base` + `k8s/cloud`를 쓰고, 온프렘 확인 후 전환한다.
+온프렘(deploy-onprem)과 AWS(deploy-aws) 배포 모두 M5-7부터 이 차트로 한다.
 
 ## 구조
 
@@ -70,8 +70,14 @@ helm get values newsbrief -n news
 
 롤백은 지금처럼 deploy-onprem 수동 실행(app, 이전 SHA)으로 한다. `helm rollback`은 다른 앱 태그까지 같이 되돌리므로 쓰지 않는다.
 
+## AWS Helm 배포 (M5-7)
+
+- workflow: `.github/workflows/deploy-aws.yml`이 `values-aws.yaml`로 배포한다
+- DB·Redis 주소, 화면 주소, AI 모드는 GitHub Variables(`AWS_DB_HOST`, `AWS_REDIS_HOST`, `AWS_APP_ORIGIN`, `AWS_AI_MODE`)를 `--set-string`으로 넘긴다. 저장소에는 주소가 없다
+- 이미지가 같고 설정 값만 바뀌면(AI 모드 전환 등) api·worker를 재시작한다. ConfigMap의 data만 비교한다
+- 처음 한 번: AWS cp(root)에서 `bash k8s/cloud/helm-adopt.sh` (지금 클러스터의 주소·설정 값을 읽어 같은 값으로 넘김)
+
 ## 남은 일
 
-1. AWS(deploy-aws)도 같은 방식으로 전환 (`values-aws.yaml`, 주소는 GitHub Variables로 `--set`)
-2. 두 환경 전환 후 `k8s/base`, `k8s/onprem/backend-config.yaml`, `k8s/onprem/ingress.yaml`, `k8s/cloud/*` 정리
-3. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
+1. 두 환경 Helm 전환 확인 후 `k8s/base`, `k8s/onprem/backend-config.yaml`, `k8s/onprem/ingress.yaml`, `k8s/cloud/*.yaml` 정리
+2. GitOps(Argo CD): 이미지 태그를 values 파일에 기록하고 Argo CD가 동기화
