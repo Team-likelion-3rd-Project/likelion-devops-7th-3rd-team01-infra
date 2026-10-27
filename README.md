@@ -9,12 +9,12 @@
 
 | 경로 | 내용 | 담당 |
 |------|------|------|
-| `k8s/base/` | 두 환경 공통 매니페스트 (API, 워커, CronJob, 프론트, MySQL, Redis) | 김상협·김차니 |
-| `k8s/onprem/` | 온프렘 전용 설정 (local-path, Ingress, COOKIE_SECURE=false) | 김상협 |
-| `k8s/cloud/` | AWS 전용 설정 (RDS·ElastiCache 주소, ALB) | 김차니 |
+| `charts/newsbrief/` | 앱 Helm 차트. 두 환경 공통 템플릿 + `values-onprem.yaml`, `values-aws.yaml` | 김상협 |
+| `k8s/onprem/` | 온프렘 전용: 배포 SA 권한(rbac), 모니터링, 백업 | 김상협 |
+| `k8s/cloud/` | AWS 배포 설명, Helm 전환 스크립트 | 김상협·김차니 |
 | `onprem/` | VM·kubeadm 클러스터 설정, 애드온 | 김상협 |
 | `terraform/` | AWS 환경 | 김차니 |
-| `.github/workflows/` | 배포 workflow (온프렘: self-hosted runner, AWS: OIDC) | 김상협·김차니 |
+| `.github/workflows/` | 배포(온프렘·AWS 모두 클러스터 안 self-hosted runner + Helm), PR 검사(chart-check, terraform-check) | 김상협·김차니 |
 
 ## 비밀 값
 
