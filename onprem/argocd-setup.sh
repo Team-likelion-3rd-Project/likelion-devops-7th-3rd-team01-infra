@@ -13,7 +13,6 @@ helm repo update argo >/dev/null
 VERSION="${ARGOCD_CHART_VERSION:-$(helm search repo argo/argo-cd -o json | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1)}"
 echo "차트 버전: argo/argo-cd $VERSION (argocd/README.md에 기록)"
 helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace --version "$VERSION" -f argocd/values.yaml --wait --timeout 10m
-kubectl apply -f k8s/onprem/argocd-rbac.yaml
 kubectl -n argocd get pods
 
 echo "== 2. 태그 브랜치(deploy/onprem) 확인"

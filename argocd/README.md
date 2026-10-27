@@ -18,13 +18,14 @@ Argo CD Application `newsbrief-onprem`(`argocd/newsbrief-onprem.yaml`)은 **depl
 
 ```
 앱 머지 → 앱 CI가 이미지 push → deploy-onprem 호출
-→ workflow가 deploy/onprem에 develop을 합치고 태그 파일 커밋 → Argo CD 새로고침 요청
-→ Argo CD가 반영 → workflow가 롤아웃·실행 버전(SHA) 확인
+→ workflow가 deploy/onprem에 develop을 합치고 태그 파일 커밋
+→ Argo CD가 3분 안에 반영 → workflow가 롤아웃·실행 버전(SHA) 확인
 
 infra develop 머지(차트·values 변경) → sync-deploy-onprem이 deploy/onprem에 합침 → Argo CD가 3분 안에 반영
 ```
 
-workflow는 클러스터를 직접 바꾸지 않는다 (kubectl은 확인·새로고침 요청에만 사용).
+workflow는 클러스터를 직접 바꾸지 않는다 (kubectl은 확인에만 사용).
+배포 SA에 Argo CD Application 권한은 주지 않는다. Application을 수정할 수 있으면 배포 대상(네임스페이스·클러스터)까지 바꿀 수 있어서다. 그래서 새로고침 요청 없이 Argo CD의 3분 확인 주기를 기다린다.
 deploy/onprem은 PR로 develop에 합치지 않는다 (GitHub의 "Compare & pull request" 안내는 무시).
 
 ## 설치 (1회, k8s-cp 관리자)
@@ -36,6 +37,40 @@ bash onprem/argocd-setup.sh
 - Argo CD 설치(차트 `argo/argo-cd`, 값 `argocd/values.yaml`) → 태그 브랜치 확인 → Application 적용 → 파드 재시작 여부 확인 → Helm 릴리스 기록 삭제
 - 태그 브랜치가 없으면 만들 명령을 출력하고 멈춘다. 맥에서 만든 뒤 다시 실행
 - 설치한 차트 버전: argo/argo-cd 10.11.6 (2026-10-27)
+
+## deploy/onprem 브랜치 보호
+
+운영 배포 기준이므로 force push·삭제를 막는다 (Settings → Branches → Add rule, 패턴 `deploy/onprem`).
+
+- Allow force pushes: 끔, Allow deletions: 끔
+- Require a pull request: **켜지 않는다** (workflow가 직접 커밋해야 함)
+
+## deploy/onprem 브랜치를 새로 만들 때 (지워졌거나 처음 설치)
+
+cp에서 지금 실행 중인 태그를 확인한다.
+
+```bash
+kubectl -n news get deploy api frontend -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.containers[0].image}{"\n"}{end}'
+```
+
+맥(또는 push 권한이 있는 곳)에서 develop을 기준으로 만든다.
+
+```bash
+git checkout develop && git pull
+git checkout -b deploy/onprem
+mkdir -p deploy
+cat > deploy/tags-onprem.yaml <<'TAGS'
+# deploy-onprem workflow가 갱신한다. Argo CD가 이 파일의 태그로 온프렘에 배포한다
+backend:
+  image:
+    tag: "<백엔드 SHA 40자리>"
+frontend:
+  image:
+    tag: "<프론트 SHA 40자리>"
+TAGS
+git add deploy/tags-onprem.yaml && git commit -m "deploy(onprem): 초기 태그" && git push -u origin deploy/onprem
+git checkout develop
+```
 
 ## 화면·관리자 비밀번호
 

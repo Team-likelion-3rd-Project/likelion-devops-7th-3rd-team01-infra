@@ -83,8 +83,8 @@ jobs:
 
       - name: Argo CD 반영 대기
         run: |
-          # Argo CD는 3분마다 Git을 확인한다. 바로 다시 읽도록 요청하고 새 이미지가 적용될 때까지 기다린다
-          kubectl annotate application/newsbrief-onprem -n argocd argocd.argoproj.io/refresh=normal --overwrite
+          # Argo CD는 약 3분마다 Git을 확인해 반영한다. 새 이미지가 적용될 때까지 기다린다
+          # (새로고침 요청은 쓰지 않는다: Application 수정 권한을 주면 배포 대상까지 바꿀 수 있어서)
           if [ "$APP" = backend ]; then deploys="api worker"; else deploys="frontend"; fi
           for i in $(seq 1 60); do
             ok=true
@@ -92,8 +92,8 @@ jobs:
               img="$(kubectl get "deployment/$d" -n "$NS" -o jsonpath='{.spec.template.spec.containers[0].image}')"
               [ "${img##*:}" = "$SHA" ] || ok=false
             done
-            $ok && { echo "Argo CD 반영 확인 (${i}회째)"; break; }
-            [ "$i" = 60 ] && { echo "::error::10분 안에 Argo CD가 반영하지 않음"; exit 1; }
+            $ok && { echo "Argo CD 반영 확인 (약 $((i * 10))초)" | tee -a "$GITHUB_STEP_SUMMARY"; break; }
+            [ "$i" = 60 ] && { echo "::error::10분 안에 Argo CD가 반영하지 않음 (Argo CD 화면에서 newsbrief-onprem 상태 확인)"; exit 1; }
             sleep 10
           done
 
@@ -117,6 +117,5 @@ jobs:
       - name: 실패 시 상태 기록
         if: failure()
         run: |
-          kubectl get application/newsbrief-onprem -n argocd -o jsonpath='{.status.sync.status} {.status.health.status} {.status.operationState.message}{"\n"}' || true
           kubectl get pods -n "$NS" -o wide || true
           kubectl get events -n "$NS" --sort-by=.lastTimestamp | tail -20 || true
