@@ -1,0 +1,7 @@
+apiVersion: v2
+name: newsbrief
+description: IT 뉴스 브리핑 앱 (api·worker·batch·frontend, 온프렘은 MySQL·Redis 포함)
+type: application
+version: 0.1.0
+# 앱 버전은 이미지 태그(커밋 SHA)로 관리한다. 여기 값은 쓰지 않는다
+appVersion: "0.0.0"

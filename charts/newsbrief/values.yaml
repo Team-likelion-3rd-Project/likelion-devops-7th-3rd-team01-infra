@@ -1,0 +1,56 @@
+# 두 환경 공통 기본값. 환경별 차이는 values-onprem.yaml, values-aws.yaml에만 둔다
+# 이미지 태그는 커밋 SHA 40자리를 배포할 때 --set-string으로 넘긴다 (숫자만 있는 SHA가 숫자로 바뀌지 않게, latest 금지)
+# 사전 준비 Secret (차트가 만들지 않음): mysql-secret(password, root-password), app-secret(JWT_SECRET)
+
+backend:
+  image:
+    repository: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-backend
+    tag: ""
+  # ConfigMap backend-config. 값이 빈 문자열이면 렌더링을 멈춘다 (빠뜨린 설정으로 배포되는 것 방지)
+  config:
+    SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/news
+    SPRING_DATASOURCE_USERNAME: news_app
+    SPRING_DATA_REDIS_HOST: redis
+    SPRING_DATA_REDIS_PORT: "6379"
+    JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75"
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+  api:
+    replicas: 2
+  worker:
+    replicas: 1
+  batch:
+    schedule: "*/30 * * * *"
+    activeDeadlineSeconds: 1500
+
+# 재부팅 직후 MySQL보다 앱이 먼저 떠서 재시작이 반복되던 문제 방지 (세 역할 공통 initContainer)
+waitMysql:
+  image: busybox:1.36.1
+
+frontend:
+  # AWS 화면은 S3·CloudFront라 끈다
+  enabled: true
+  image:
+    repository: ghcr.io/team-likelion-3rd-project/likelion-devops-7th-3rd-team01-frontend
+    tag: ""
+  replicas: 2
+
+mysql:
+  # true: 클러스터 안 StatefulSet (온프렘) / false: ExternalName으로 외부 DB 연결 (AWS RDS)
+  inCluster: true
+  externalHost: ""
+  image: mysql:8.4
+  storage: 10Gi
+
+redis:
+  # true: 클러스터 안 Deployment (온프렘) / false: ExternalName으로 외부 Redis 연결 (AWS ElastiCache)
+  inCluster: true
+  externalHost: ""
+  image: redis:7.4-alpine
+
+ingress:
+  name: news
+  className: ""
+  # true면 / → frontend 경로도 만든다 (온프렘). /actuator는 어느 환경에서도 연결하지 않는다
+  frontend: true

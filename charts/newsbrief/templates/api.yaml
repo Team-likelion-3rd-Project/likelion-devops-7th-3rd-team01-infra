@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: api
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.api.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      terminationGracePeriodSeconds: 30
+      initContainers:
+      {{- include "newsbrief.waitMysql" . | nindent 6 }}
+      containers:
+      - name: api
+        image: {{ include "newsbrief.backendImage" . }}
+        ports:
+        - name: http   # PodMonitor가 이름으로 찾는다
+          containerPort: 8080
+        # 롤링 배포 중 실패 0건 (M5-9): 엔드포인트에서 빠지는 10초 뒤 종료 신호.
+        # 앱은 처리 중 요청을 최대 15초 기다린다 → 10 + 15 = 25초 < terminationGracePeriodSeconds 30초
+        lifecycle:
+          preStop:
+            exec: {command: ['sleep', '10']}
+        env:
+        {{- include "newsbrief.backendEnv" (dict "role" "api") | nindent 8 }}
+        envFrom:
+        - configMapRef: {name: backend-config}
+        startupProbe:
+          httpGet: {path: /actuator/health/liveness, port: 8080}
+          periodSeconds: 5
+          failureThreshold: 30
+        livenessProbe:
+          httpGet: {path: /actuator/health/liveness, port: 8080}
+          periodSeconds: 10
+        readinessProbe:
+          httpGet: {path: /actuator/health/readiness, port: 8080}
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.backend.resources | nindent 10 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "newsbrief.labels" . | nindent 4 }}
+spec:
+  selector: {app: api}
+  ports:
+  - port: 8080
+    targetPort: 8080
