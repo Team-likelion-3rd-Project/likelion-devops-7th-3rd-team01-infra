@@ -91,3 +91,42 @@ variable "domain_name" {
   description = "서비스 도메인 (예: news.example.com). 접속 주소라 저장소에 두지 않고 terraform.tfvars에 넣는다"
   type        = string
 }
+
+variable "eks_enabled" {
+  description = "EKS 클러스터를 만들지 (M5-3). 전환이 끝나기 전까지 kubeadm 클러스터와 함께 둔다"
+  type        = bool
+  default     = false
+}
+
+variable "eks_version" {
+  description = "EKS 쿠버네티스 버전. 적용 전 aws eks describe-cluster-versions로 지원 여부 확인"
+  type        = string
+  default     = "1.35"
+}
+
+variable "eks_node_instance_type" {
+  type    = string
+  default = "t3.medium"
+}
+
+variable "eks_node_desired" {
+  description = "EKS 노드 수. 밤에는 0으로 두어 노드 비용을 멈춘다"
+  type        = number
+  default     = 2
+}
+
+variable "eks_public_access_cidrs" {
+  description = "EKS API 공개 엔드포인트 허용 IP (예: [\"x.x.x.x/32\"]). 저장소에 두지 않고 terraform.tfvars에 넣는다. 비우면 VPC 안에서만 접속"
+  type        = list(string)
+  default     = []
+}
+
+variable "alb_backend" {
+  description = "ALB가 보낼 클러스터: kubeadm(지금) 또는 eks. 문제가 생기면 kubeadm으로 되돌린다"
+  type        = string
+  default     = "kubeadm"
+  validation {
+    condition     = contains(["kubeadm", "eks"], var.alb_backend)
+    error_message = "alb_backend must be kubeadm or eks."
+  }
+}

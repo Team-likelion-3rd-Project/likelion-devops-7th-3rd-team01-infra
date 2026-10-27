@@ -12,4 +12,9 @@ module "compute" {
   k8s_minor            = var.k8s_minor
   k8s_version          = var.k8s_version
   bedrock_policy_name  = var.bedrock_policy_name
+
+  # EKS 전환 (M5-3)
+  eks_enabled  = var.eks_enabled
+  eks_asg_name = coalesce(one(module.eks[*].node_asg_name), "none")
+  alb_backend  = var.alb_backend
 }
