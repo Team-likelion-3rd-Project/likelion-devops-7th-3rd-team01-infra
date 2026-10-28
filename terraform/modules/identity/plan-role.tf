@@ -53,6 +53,24 @@ data "aws_iam_policy_document" "plan_read" {
     resources = ["*"]
   }
 
+  # EKS 클러스터·노드 그룹·애드온·Pod Identity 연결·액세스 엔트리 조회 (#67 EKS 전환 이후 plan에 필요).
+  # 조회(Describe/List)만 허용한다. 생성·수정·삭제는 apply 역할에서만 한다.
+  statement {
+    sid = "ReadEks"
+    actions = [
+      "eks:Describe*",
+      "eks:List*",
+    ]
+    resources = ["*"]
+  }
+
+  # EKS 노드 그룹의 Auto Scaling Group을 ALB 대상 그룹에 붙인 리소스(aws_autoscaling_attachment) 조회에 필요. 조회만 허용한다.
+  statement {
+    sid       = "ReadAutoScaling"
+    actions   = ["autoscaling:Describe*"]
+    resources = ["*"]
+  }
+
   # 우리 버킷(프론트·상태)의 설정 조회만. 객체 내용은 읽지 못한다.
   statement {
     sid = "ReadOwnBucketSettings"
