@@ -7,8 +7,8 @@ alb_target_ports = [30080]
 # 서비스 도메인 (접속 주소라 저장소에 두지 않음). api.<domain_name>이 ALB 주소가 된다
 domain_name = "news.example.com"
 
-# EKS (M5-3). 전환 전까지 alb_backend는 kubeadm
+# EKS (M5-3). 운영은 EKS로 전환 완료 (eks_enabled = true, alb_backend = "eks")
 # eks_enabled             = true
-# eks_public_access_cidrs = ["x.x.x.x/32"]   # 내 공인 IP. 저장소에 올리지 않는다
+# eks_public_access_cidrs = ["x.x.x.x/32"]   # 내 공인 IP. 저장소에 올리지 않는다. 비우면 API가 비공개가 됨
 # eks_node_desired        = 2                # 밤에는 0
-# alb_backend             = "kubeadm"        # 전환할 때 "eks"
+# alb_backend             = "eks"            # 기본값은 "kubeadm"(롤백용)
