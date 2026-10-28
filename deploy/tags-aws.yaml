@@ -2,4 +2,4 @@
 # 롤백: deploy-aws를 이전 SHA로 수동 실행 (또는 이 파일의 이전 커밋으로 되돌리기)
 backend:
   image:
-    tag: "350c98d16e9aaba159790cda70dea1075387ebc5"
+    tag: "e9a7a401045ea1cc5eba7cad83be03db1c2cdaf7"
