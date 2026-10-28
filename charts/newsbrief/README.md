@@ -73,7 +73,10 @@ helm get values newsbrief -n news
 
 롤백은 지금처럼 deploy-onprem 수동 실행(app, 이전 SHA)으로 한다. `helm rollback`은 다른 앱 태그까지 같이 되돌리므로 쓰지 않는다.
 
-## AWS Helm 배포 (M5-7)
+## AWS Helm 배포 (M5-7) → EKS Argo CD로 전환 (M5-3)
+
+> AWS는 이제 EKS의 Argo CD(newsbrief-aws)가 이 차트로 배포한다 (k8s/cloud/README.md). 이미지 태그는 deploy/aws 브랜치의 `deploy/tags-aws.yaml`에 있다.
+> 아래는 kubeadm에서 Helm으로 직접 배포하던 때의 기록이다.
 
 - workflow: `.github/workflows/deploy-aws.yml`이 `values-aws.yaml`로 배포한다
 - DB·Redis 주소, 화면 주소, AI 모드는 GitHub Variables(`AWS_DB_HOST`, `AWS_REDIS_HOST`, `AWS_APP_ORIGIN`, `AWS_AI_MODE`)를 `--set-string`으로 넘긴다. 저장소에는 주소가 없다
@@ -82,4 +85,4 @@ helm get values newsbrief -n news
 
 ## 남은 일
 
-1. GitOps(Argo CD): 온프렘은 적용 (`argocd/`), AWS는 EKS 전환 때 같은 방식으로 적용
+1. 두 환경 모두 GitOps 적용 완료 (온프렘 `argocd/newsbrief-onprem.yaml`, AWS `argocd/newsbrief-aws.yaml.example`)

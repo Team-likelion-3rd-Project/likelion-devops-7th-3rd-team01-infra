@@ -46,14 +46,16 @@ kubectl --context team01-eks get pods -n kube-system   # coredns·metrics-server
 
 IP가 바뀌면(장소 이동) `eks_public_access_cidrs`만 고쳐서 apply한다.
 
-## 2단계: 앱 올리고 전환 (다음 작업)
+## 2단계: 앱 올리고 전환 (10/27 완료)
 
-1. EKS에 Traefik(NodePort 30080), Argo CD 설치
-2. news 네임스페이스 Secret(mysql-secret, app-secret, ghcr-pull) 생성. 값은 채팅·저장소에 두지 않고 `read -s`로 입력
-3. Argo CD Application(newsbrief-aws): 차트 + values-aws.yaml + 태그. DB·Redis 주소, 화면 주소, AI 모드는 저장소가 아니라 Application에 직접 넣는다
-4. EKS 대상 그룹 헬스체크 healthy 확인 → `alb_backend = "eks"` apply → 사이트·로그인·질문 확인
-5. 이상 있으면 `alb_backend = "kubeadm"` apply로 즉시 되돌림
-6. 며칠 안정적이면 kubeadm EC2 정리
+1. `bash k8s/cloud/eks-setup.sh` : Traefik(NodePort 30080), Secret, Argo CD, Application(newsbrief-aws), Pod Identity·30080 경로 확인
+2. `terraform.tfvars`에 `alb_backend = "eks"` → plan(1 change, 리스너) → apply
+3. 확인: EKS 대상 그룹 healthy 2개, `https://app.<도메인>/api/news/home` 200, 로그인·질문
+4. 기존 kubeadm 앱 내리기 (RDS 연결 한도 때문에 두 클러스터가 동시에 붙으면 Too many connections):
+   kubeadm cp에서 `kubectl -n news scale deploy api worker --replicas=0`, `kubectl -n news patch cronjob batch -p '{"spec":{"suspend":true}}'`
+5. 되돌리기: kubeadm 앱을 다시 늘린 뒤(api 2, worker 1, batch suspend false) `alb_backend = "kubeadm"` apply
+
+ALB 대상 그룹은 리스너에 연결되기 전에는 헬스체크를 하지 않아 `unused`로 보인다. 전환 전에는 1번 스크립트의 노드 30080 확인으로 대신한다.
 
 ## 밤에 끄기 (EKS 있는 동안)
 
@@ -62,7 +64,20 @@ eks_node_desired = 0      # 노드 비용 멈춤 (컨트롤 플레인 시간당 
 nat_mode         = "none"
 ```
 
-아침에는 `eks_node_desired = 2`, `nat_mode` 기본값으로 되돌려 apply (NAT가 있어야 노드가 이미지를 받는다).
+apply 후 노드가 지워지지 않고 `Terminating:Wait`에 멈추면 coredns·metrics-server의 PodDisruptionBudget 때문이다
+(두 노드를 다 비우므로 옮겨 갈 곳이 없어 drain이 멈춤). 밤에는 서비스가 꺼지므로 그 파드를 직접 지운다.
+
+```bash
+kubectl --context team01-eks -n kube-system get pods -o name | grep -E 'coredns|metrics-server' \
+  | xargs kubectl --context team01-eks -n kube-system delete
+```
+
+아침에는 NAT를 먼저(노드가 이미지를 받아야 함), 그다음 노드를 켠다.
+
+```bash
+sed -i '' '/^nat_mode *= *"none"$/d' terraform.tfvars && terraform apply
+sed -i '' '/^eks_node_desired *= *0$/d' terraform.tfvars && terraform apply
+```
 
 ## 비용
 
