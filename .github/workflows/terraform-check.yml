@@ -110,12 +110,27 @@ jobs:
         continue-on-error: true
         env:
           TFVARS: ${{ vars.TFVARS }}
+          EKS_PUBLIC_ACCESS_CIDRS: ${{ secrets.EKS_PUBLIC_ACCESS_CIDRS }}
         run: |
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
           echo "::add-mask::${account_id}"
           # The workflow log is public. Never print the plan itself.
           printf '%s\n' "$TFVARS" > terraform.tfvars
+          # The public IP list is a Secret, not part of the TFVARS variable.
+          # Mask every CIDR (and its bare IP) before it can reach any log line.
+          raw="${EKS_PUBLIC_ACCESS_CIDRS:-}"
+          if [ -n "$raw" ]; then
+            case "$raw" in
+              "["*) cidrs="$raw" ;;
+              *) cidrs="[\"$raw\"]" ;;
+            esac
+            printf '%s' "$cidrs" | jq -r '.[]' | while IFS= read -r cidr; do
+              echo "::add-mask::${cidr}"
+              echo "::add-mask::${cidr%%/*}"
+            done
+            export TF_VAR_eks_public_access_cidrs="$cidrs"
+          fi
           terraform init -reconfigure -input=false -lockfile=readonly \
             -backend-config="bucket=team01-newsbrief-tfstate-${account_id}" > /dev/null
           terraform plan -input=false -lock=false -no-color \
