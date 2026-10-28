@@ -25,6 +25,7 @@
 | `domain_name` | 서비스 도메인 | 저장소에 올리지 않음 |
 
 - 이 값들이 개인 PC의 파일에만 있으므로, 새 작업자는 팀원에게 받아야 한다.
+- CI(`terraform-check`)의 plan 입력은 GitHub 변수 `TFVARS`에서 온다. 저장소가 공개라 Actions 로그도 공개되므로, IP(`eks_public_access_cidrs`)는 변수가 아니라 Secret `EKS_PUBLIC_ACCESS_CIDRS`에 두고 워크플로에서 `TF_VAR_eks_public_access_cidrs`로 넘긴다. 변수 `TFVARS`가 운영 값과 다르면 plan에 EKS 삭제처럼 실제와 다른 변경이 보인다.
 
 ## 3. 종료 대상과 보관 대상
 
@@ -52,11 +53,11 @@
 1. **외부 DNS(`n-e.kr`)**: ALB 주소와 CloudFront 도메인이 바뀌면 CNAME을 고쳐야 한다. ACM 검증 레코드는 같은 계정·도메인이면 재사용될 수 있으나 확인하지 않았다.
 2. **쿠버네티스 구성**: `k8s/cloud/eks-setup.sh`(Traefik, Secrets, Argo CD, Application)를 실행해야 하며 Secrets는 사람이 입력한다. SSM 복사 방식은 kubeadm 제어 노드가 있어야 가능하므로, kubeadm을 정리한 뒤에는 `read -s` 입력 방식만 쓸 수 있다.
 3. **콘솔에서 만든 Bedrock 정책** `newsbrief-bedrock-invoke`: 코드가 이름으로 읽는다(`bedrock_policy_name`). 같은 계정이면 destroy해도 남아 있다. 새 계정에서는 먼저 만들어야 한다.
-4. **NAT 고정 IP**: 재생성하면 바뀐다. 이 IP를 허용 목록에 쓰는 곳이 있으면 갱신해야 한다 (확인하지 않았음).
+4. **NAT 고정 IP**: 영향 없음. 이 IP를 허용 목록에 쓰는 곳이 없고, 야간에 `nat_mode = none`으로 EIP까지 지웠다가 아침에 새로 만드는 운영을 이미 해 왔으나 문제가 없었다. (김상협 확인, 10/28)
 5. **GitHub Variables**: 위 보관 역할을 지운 경우에만 해당. 역할 ARN을 다시 입력해야 한다.
 
 ## 5. 미결정 사항
 
-- plan·apply·frontend-deploy 역할을 destroy에서 제외하는 방법 (`terraform state rm` 후 재가져오기, 또는 `-target`으로 삭제 범위 한정, 또는 별도 상태 파일로 분리)
+- plan·apply·frontend-deploy 역할을 destroy에서 제외하는 방법: **별도 상태 파일 분리를 권장하며 지금은 적용하지 않음** (김상협 확인, 10/28). 다른 방법은 `terraform state rm` 후 재가져오기, `-target`으로 삭제 범위 한정.
 - RDS 스냅샷 복원용 변수 추가 여부
 - 소요 시간은 실제 destroy → apply를 실행할 때 기록한다
