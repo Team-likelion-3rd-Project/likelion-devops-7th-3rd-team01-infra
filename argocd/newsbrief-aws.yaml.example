@@ -1,0 +1,32 @@
+# AWS(EKS) 앱 (Argo CD Application) 예시. 실제 값은 저장소에 두지 않는다
+# k8s/cloud/eks-setup.sh가 terraform output·terraform.tfvars 값으로 채워 EKS에 직접 적용한다
+# deploy/aws 브랜치 = develop + 이미지 태그 파일(deploy/tags-aws.yaml). deploy-aws workflow가 갱신한다
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: newsbrief-aws
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: news
+  source:
+    repoURL: https://github.com/Team-likelion-3rd-Project/likelion-devops-7th-3rd-team01-infra.git
+    targetRevision: deploy/aws
+    path: charts/newsbrief
+    helm:
+      releaseName: newsbrief
+      valueFiles:
+      - values-aws.yaml
+      - ../../deploy/tags-aws.yaml
+      # 공개 저장소에 두지 않는 값. 클러스터의 Application에만 있다
+      parameters:
+      - {name: mysql.externalHost, value: "<RDS 주소: terraform output -raw db_endpoint>", forceString: true}
+      - {name: redis.externalHost, value: "<Redis 주소: terraform output -raw redis_endpoint>", forceString: true}
+      - {name: backend.config.CORS_ALLOWED_ORIGINS, value: "https://app.<도메인>", forceString: true}
+      - {name: backend.config.AI_MODE, value: "<mock | bedrock>", forceString: true}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
