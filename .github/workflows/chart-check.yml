@@ -52,6 +52,10 @@ jobs:
           # AWS에 프론트·MySQL StatefulSet이 들어가면 안 된다
           ! grep -q '^kind: StatefulSet' aws.yaml
           ! grep -q 'name: frontend' aws.yaml
+          # api HPA (M5-10): AWS에만 있고, HPA가 있으면 api Deployment에 replicas가 없어야 한다 (Argo CD와 개수 다툼 방지)
+          grep -q '^kind: HorizontalPodAutoscaler' aws.yaml
+          ! grep -q '^kind: HorizontalPodAutoscaler' onprem.yaml
+          test "$(grep -c '^  replicas:' aws.yaml)" = 1   # worker 하나만
 
       - name: 안전장치 (실패해야 정상)
         run: |

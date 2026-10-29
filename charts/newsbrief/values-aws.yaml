@@ -3,6 +3,10 @@
 #   --set mysql.externalHost=$DB_HOST --set redis.externalHost=$REDIS_HOST
 #   --set-string backend.config.CORS_ALLOWED_ORIGINS=$APP_ORIGIN --set-string backend.config.AI_MODE=$AI_MODE
 backend:
+  # api 자동 확장 (M5-10). 최대 4개 × DB 연결 풀 5 + worker·batch = 30으로 RDS 연결 한도 안
+  api:
+    hpa:
+      enabled: true
   config:
     # HTTPS(ALB·CloudFront)라 로그인 쿠키를 Secure로
     COOKIE_SECURE: "true"

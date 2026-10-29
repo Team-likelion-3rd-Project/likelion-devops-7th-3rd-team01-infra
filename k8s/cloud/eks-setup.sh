@@ -29,9 +29,11 @@ echo "  설정 값 확인 (주소는 출력하지 않음), AI_MODE=$AI_MODE"
 echo "== 1. Traefik (NodePort 30080, ALB 대상 그룹 team01-eks-web)"
 helm repo add traefik https://traefik.github.io/charts >/dev/null 2>&1 || true
 helm repo update traefik >/dev/null
+# ServiceMonitor는 모니터링(monitoring-setup.sh)이 CRD를 설치한 뒤에만 켤 수 있다. 다시 실행해도 꺼지지 않게 CRD로 판단
+SM=false; K get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1 && SM=true
 helm --kube-context "$CTX" upgrade --install traefik traefik/traefik --version "$TRAEFIK_VERSION" \
   -n traefik --create-namespace -f onprem/traefik-values.yaml \
-  --set metrics.prometheus.serviceMonitor.enabled=false --wait --timeout 5m
+  --set metrics.prometheus.serviceMonitor.enabled="$SM" --wait --timeout 5m
 
 echo "== 2. news 네임스페이스와 Secret"
 K create namespace "$NS" --dry-run=client -o yaml | K apply -f -

@@ -1,0 +1,55 @@
+# kube-prometheus-stack 설정 (EKS, M5-8). 온프렘(onprem/monitoring-values.yaml)과 같은 차트·버전, EKS에 맞춘 차이만 둔다
+# 설치·변경: bash k8s/cloud/monitoring-setup.sh (맥에서 실행)
+fullnameOverride: kps
+
+prometheus:
+  prometheusSpec:
+    # 저장소 없음(emptyDir): EBS CSI 드라이버를 두지 않았고, 밤마다 노드를 0대로 줄여 어차피 지표가 이어지지 않는다
+    # 노드 루트 디스크를 쓰므로 크기 상한을 둔다
+    retention: 1d
+    retentionSize: 2GB
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+      limits: {memory: 1Gi}
+    # 차트 밖에서 만든 ServiceMonitor·PodMonitor·PrometheusRule(Traefik, 백엔드, news-alerts)도 읽게 한다
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+# t3.medium은 노드당 파드 17개(VPC CNI)라 칸을 아낀다. 알림 규칙은 Prometheus·Grafana의 Alerting 화면에서 본다
+alertmanager:
+  enabled: false
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  # 노드는 프라이빗 서브넷이고 ALB는 앱만 연결한다. 화면은 kubectl port-forward로만 연다
+  service:
+    type: ClusterIP
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+kube-state-metrics:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 64Mi}
+
+# EKS 컨트롤 플레인(etcd·controller-manager·scheduler)은 AWS가 관리해 수집할 수 없다
+# kube-proxy는 지표를 127.0.0.1에서만 열어 수집이 실패한다
+kubeEtcd: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
