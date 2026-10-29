@@ -1,0 +1,30 @@
+{{- /* api 자동 확장 (M5-10). backend.api.hpa.enabled가 true인 환경에서만 만든다 */ -}}
+{{- with .Values.backend.api.hpa }}
+{{- if .enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    app: api
+    {{- include "newsbrief.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: {{ .minReplicas }}
+  maxReplicas: {{ .maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .cpuUtilization }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ .scaleDownStabilizationSeconds }}
+{{- end }}
+{{- end }}

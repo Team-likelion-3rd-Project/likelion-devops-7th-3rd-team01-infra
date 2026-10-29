@@ -17,7 +17,18 @@ backend:
     requests: {cpu: 250m, memory: 512Mi}
     limits: {memory: 1Gi}
   api:
+    # HPA를 끈 환경에서만 쓴다. HPA를 켜면 Deployment에 replicas를 쓰지 않는다
+    # (Argo CD selfHeal이 Git의 replicas로 되돌려 HPA와 개수를 두고 다투지 않게)
     replicas: 2
+    # api 자동 확장 (M5-10). 기준은 위키 성능 테스트 4장 "확장 기준": 요청 250m의 70% = 175m
+    # metrics-server가 있는 환경에서만 켠다 (EKS는 애드온으로 설치됨)
+    hpa:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 4
+      cpuUtilization: 70
+      # 부하가 잠깐 줄었다고 바로 줄였다가 다시 늘리지 않도록 2분 기다린 뒤 줄인다
+      scaleDownStabilizationSeconds: 120
   worker:
     replicas: 1
   batch:
