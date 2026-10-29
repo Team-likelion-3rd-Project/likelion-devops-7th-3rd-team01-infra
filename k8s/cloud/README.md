@@ -69,6 +69,19 @@ kubectl --context team01-eks -n argocd get secret argocd-initial-admin-secret -o
 
 로그인 후 비밀번호를 바꾸고 `argocd-initial-admin-secret`을 지운다.
 
+## api 자동 확장 (HPA, M5-10)
+
+`values-aws.yaml`에서 `backend.api.hpa.enabled: true`. 최소 2, 최대 4, 평균 CPU 70%(요청 250m 기준 175m), 줄일 때 2분 대기.
+HPA를 켜면 api Deployment에 `replicas`를 쓰지 않는다. 쓰면 Argo CD selfHeal이 Git 값(2)으로 되돌려 HPA와 개수를 두고 다툰다.
+
+```bash
+kubectl --context team01-eks -n news get hpa api -w          # TARGETS(현재 CPU/기준)와 REPLICAS 변화
+kubectl --context team01-eks -n news describe hpa api | tail -15   # 늘리고 줄인 시각(Events)
+```
+
+- 처음 적용할 때 Deployment에서 `replicas`가 빠지면서 잠깐 1개가 됐다가 HPA가 바로 2개로 맞춘다 (사용자 적은 시간에 적용)
+- 온프렘은 metrics-server를 확인한 뒤 `values-onprem.yaml`에서 켠다
+
 ## 모니터링 (EKS, M5-8)
 
 온프렘과 같은 kube-prometheus-stack(92.10.1)·대시보드·알림 규칙을 쓴다. 설정 차이는 `monitoring-values.yaml`에 있다.
