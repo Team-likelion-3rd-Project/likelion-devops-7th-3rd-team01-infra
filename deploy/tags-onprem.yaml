@@ -2,7 +2,7 @@
 # 롤백: deploy-onprem을 이전 SHA로 수동 실행 (또는 이 파일의 이전 커밋으로 되돌리기)
 backend:
   image:
-    tag: "fa5e3b6a7dea50ade375b69d8b5832024b06b97a"
+    tag: "bea7a6553df9aefa4b746142140a375256622ae8"
 frontend:
   image:
     tag: "28baef066178e3366ca3bd231352c3aa0976bd02"
