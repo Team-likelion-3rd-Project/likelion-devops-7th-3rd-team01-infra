@@ -5,4 +5,4 @@ backend:
     tag: "fa5e3b6a7dea50ade375b69d8b5832024b06b97a"
 frontend:
   image:
-    tag: "0b6daac7e362c0c4f68a7cc401da2f645261b66b"
+    tag: "28baef066178e3366ca3bd231352c3aa0976bd02"
